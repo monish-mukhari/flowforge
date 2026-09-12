@@ -26,9 +26,9 @@ async function seedDB() {
             }
         ];
 
-        await prisma.availableTrigger.createMany({ data: availableTriggers });
+        await prisma.availableTrigger.createMany({ data: availableTriggers, skipDuplicates: true });
         
-        await prisma.availableAction.createMany({ data: availableActions });
+        await prisma.availableAction.createMany({ data: availableActions, skipDuplicates: true });
 
     } catch(error) {
 
@@ -38,4 +38,4 @@ async function seedDB() {
     }
 }
 
-seedDB();
+seedDB().finally(() => prisma.$disconnect());

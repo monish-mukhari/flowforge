@@ -4,10 +4,15 @@ import prisma from '@repo/db/client';
 const app = express();
 app.use(express.json());
 
-app.post("/hooks/catch/:userId/:zapId", async (req, res) => {
-    const userId = req.params.userId;
+app.get("/health", (_req, res) => res.json({ status: "ok", service: "hooks" }));
+
+app.post("/hooks/catch/:userId/:zapId", async (req, res): Promise<any> => {
+    const userId = Number(req.params.userId);
     const zapId = req.params.zapId;
     const body = req.body;
+
+    const zap = await prisma.zap.findFirst({ where: { id: zapId, userId }, select: { id: true } });
+    if (!zap) return res.status(404).json({ message: "Webhook workflow not found" });
 
     await prisma.$transaction(async (tx: any) => {
         const run = await tx.zapRun.create({
@@ -30,6 +35,7 @@ app.post("/hooks/catch/:userId/:zapId", async (req, res) => {
 
 });
 
-app.listen(3001, () => {
-    console.log("Listening on port 3001");
+const port = Number(process.env.PORT || 3001);
+app.listen(port, () => {
+    console.log(`hooks service running on port ${port}`);
 });

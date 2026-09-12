@@ -1,81 +1,62 @@
-# Turborepo starter
+# FlowForge
 
-This is an official starter Turborepo.
+A small Zapier-style automation platform. A user creates a workflow with a webhook trigger and one or more Email or Solana actions. Webhook runs are persisted through a transactional outbox, published to Kafka, and executed by a stage-based worker.
 
-## Using this example
+## Start the complete stack
 
-Run the following command:
+Docker and Docker Compose are the only prerequisites.
 
-```sh
-npx create-turbo@latest
+```bash
+docker compose up --build
 ```
 
-## What's inside?
+This single command starts PostgreSQL, applies Prisma migrations, seeds the available apps, starts Kafka, both APIs, the sweeper, worker, frontend, and a local email inbox.
 
-This Turborepo includes the following packages/apps:
+Open:
 
-### Apps and Packages
+- Web app: http://localhost:3000
+- Captured development emails: http://localhost:8025
+- Primary API health: http://localhost:3002/health
+- Hooks API health: http://localhost:3001/health
 
-- `docs`: a [Next.js](https://nextjs.org/) app
-- `web`: another [Next.js](https://nextjs.org/) app
-- `@repo/ui`: a stub React component library shared by both `web` and `docs` applications
-- `@repo/eslint-config`: `eslint` configurations (includes `eslint-config-next` and `eslint-config-prettier`)
-- `@repo/typescript-config`: `tsconfig.json`s used throughout the monorepo
+The first image build can take a few minutes. Later starts reuse the images and named PostgreSQL volume.
 
-Each package/app is 100% [TypeScript](https://www.typescriptlang.org/).
-
-### Utilities
-
-This Turborepo has some additional tools already setup for you:
-
-- [TypeScript](https://www.typescriptlang.org/) for static type checking
-- [ESLint](https://eslint.org/) for code linting
-- [Prettier](https://prettier.io) for code formatting
-
-### Build
-
-To build all apps and packages, run the following command:
-
-```
-cd my-turborepo
-pnpm build
+```bash
+docker compose down
 ```
 
-### Develop
+To also remove local database data, explicitly run `docker compose down -v`.
 
-To develop all apps and packages, run the following command:
+## Configuration
 
+The default configuration works for webhook and email workflows. Mailpit captures email locally, so no SMTP setup is required.
+
+To use the Solana action, copy `.env.example` to `.env` and set `SOL_PRIVATE_KEY`. The implementation defaults to Solana mainnet; use `SOLANA_RPC_URL` to point it at a different RPC endpoint.
+
+Browser-facing backend URLs default to localhost. Override `NEXT_PUBLIC_BACKEND_URL` and `NEXT_PUBLIC_HOOKS_URL` before building when deploying remotely.
+
+## Services
+
+| Service | Responsibility |
+| --- | --- |
+| `web` | Next.js landing page, auth, dashboard, builder, and workflow detail UI |
+| `primary-backend` | Users, JWT auth, app catalog, and workflow CRUD API |
+| `hooks` | Receives webhook payloads and atomically creates `ZapRun` + outbox rows |
+| `sweeper` | Publishes pending outbox rows to the Kafka `zap-events` topic |
+| `worker` | Resolves webhook templates and executes actions in sorting order |
+| `postgres` | Workflow configuration, run payloads, and transactional outbox |
+| `kafka` | Asynchronous workflow-stage delivery |
+| `mailpit` | Local SMTP server and browser inbox |
+
+## Payload templates
+
+Action inputs can reference webhook JSON with braces. For this payload:
+
+```json
+{
+  "customer": { "name": "Ada", "email": "ada@example.com" },
+  "payment": { "amount": "0.01" }
+}
 ```
-cd my-turborepo
-pnpm dev
-```
 
-### Remote Caching
-
-Turborepo can use a technique known as [Remote Caching](https://turbo.build/repo/docs/core-concepts/remote-caching) to share cache artifacts across machines, enabling you to share build caches with your team and CI/CD pipelines.
-
-By default, Turborepo will cache locally. To enable Remote Caching you will need an account with Vercel. If you don't have an account you can [create one](https://vercel.com/signup), then enter the following commands:
-
-```
-cd my-turborepo
-npx turbo login
-```
-
-This will authenticate the Turborepo CLI with your [Vercel account](https://vercel.com/docs/concepts/personal-accounts/overview).
-
-Next, you can link your Turborepo to your Remote Cache by running the following command from the root of your Turborepo:
-
-```
-npx turbo link
-```
-
-## Useful Links
-
-Learn more about the power of Turborepo:
-
-- [Tasks](https://turbo.build/repo/docs/core-concepts/monorepos/running-tasks)
-- [Caching](https://turbo.build/repo/docs/core-concepts/caching)
-- [Remote Caching](https://turbo.build/repo/docs/core-concepts/remote-caching)
-- [Filtering](https://turbo.build/repo/docs/core-concepts/monorepos/filtering)
-- [Configuration Options](https://turbo.build/repo/docs/reference/configuration)
-- [CLI Usage](https://turbo.build/repo/docs/reference/command-line-reference)
+an Email recipient can be `{customer.email}`, and a message can contain `Hi {customer.name}`.

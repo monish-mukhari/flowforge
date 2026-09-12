@@ -2,12 +2,12 @@ import nodemailer from "nodemailer";
 
 const transport = nodemailer.createTransport({
     host: process.env.SMTP_ENDPOINT,
-    port: 587,
+    port: Number(process.env.SMTP_PORT || 587),
     secure: false,
-    auth: {
+    auth: process.env.SMTP_USERNAME ? {
       user: process.env.SMTP_USERNAME,
       pass: process.env.SMTP_PASSWORD,
-    },
+    } : undefined,
 })
 
 

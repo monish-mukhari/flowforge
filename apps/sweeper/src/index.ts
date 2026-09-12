@@ -6,7 +6,7 @@ const TOPIC_NAME = 'zap-events';
 
 const kafka = new Kafka({
     clientId: 'sweeper',
-    brokers: ['localhost:9092'],
+    brokers: (process.env.KAFKA_BROKERS || 'localhost:9092').split(','),
 });
 
 async function main() {
@@ -39,7 +39,7 @@ async function main() {
             }
         });
 
-        await new Promise(r => setTimeout(r, 3000));
+        await new Promise(r => setTimeout(r, Number(process.env.SWEEP_INTERVAL_MS || 3000)));
         
     }
 }

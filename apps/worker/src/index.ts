@@ -5,12 +5,13 @@ import prisma from "@repo/db/client";
 import { JsonObject } from "@prisma/client/runtime/library";
 import { parse } from './parser';
 import { sendSol } from './solana';
+import { sendEmail } from './email';
 
 const TOPIC_NAME = 'zap-events';
 
 const kafka = new Kafka({
     clientId: 'worker',
-    brokers: ['localhost:9092'],
+    brokers: (process.env.KAFKA_BROKERS || 'localhost:9092').split(','),
 });
 
 async function main() {
@@ -68,6 +69,7 @@ async function main() {
                 const body = parse((currentAction.metadata as JsonObject)?.body as string, zapRunMetadata);
                 const to = parse((currentAction.metadata as JsonObject)?.email as string, zapRunMetadata);
                 console.log(`Sending out email to ${to} body is ${body}`);   
+                await sendEmail(to, body);
             }
 
             if(currentAction.type.id === "solana") {

@@ -9,6 +9,8 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
+app.get("/health", (_req, res) => res.json({ status: "ok", service: "primary-backend" }));
+
 app.use("/api/v1/user", userRouter);
 
 app.use("/api/v1/zap", zapRouter);
@@ -17,6 +19,7 @@ app.use("/api/v1/action", actionRouter);
 
 app.use("/api/v1/trigger", triggerRouter);
 
-app.listen(3002, () => {
-    console.log("primary be running on port 3002");
+const port = Number(process.env.PORT || 3002);
+app.listen(port, () => {
+    console.log(`primary backend running on port ${port}`);
 })
