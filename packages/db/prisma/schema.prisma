@@ -14,66 +14,127 @@ datasource db {
 }
 
 model User {
-  id        Int      @id @default(autoincrement())
-  name      String
-  email     String   @unique
-  password  String   
-  zaps      Zap[]
+  id                      Int                      @id @default(autoincrement())
+  name                    String
+  email                   String                   @unique
+  passwordHash            String                   @map("password")
+  emailVerifiedAt         DateTime?                @map("email_verified_at")
+  createdAt               DateTime                 @default(now()) @map("created_at")
+  updatedAt               DateTime                 @updatedAt @map("updated_at")
+  zaps                    Zap[]
+  sessions                AuthSession[]
+  emailVerificationTokens EmailVerificationToken[]
+  passwordResetTokens     PasswordResetToken[]
+}
+
+model AuthSession {
+  id               String    @id @default(uuid())
+  userId           Int       @map("user_id")
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refreshTokenHash String    @unique @map("refresh_token_hash")
+  expiresAt        DateTime  @map("expires_at")
+  revokedAt        DateTime? @map("revoked_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model EmailVerificationToken {
+  id        String   @id @default(uuid())
+  userId    Int      @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique @map("token_hash")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  userId    Int       @map("user_id")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([expiresAt])
 }
 
 model Zap {
-  id        String   @id @default(uuid())
-  userId    Int      @map("user_id")
-  user      User     @relation(fields: [userId], references: [id])
-  triggerId String   @map("trigger_id")
-  trigger   Trigger?
-  actions   Action[]
-  zapRuns   ZapRun[]
+  id           String   @id @default(uuid())
+  userId       Int      @map("user_id")
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  triggerId    String   @map("trigger_id")
+  trigger      Trigger?
+  actions      Action[]
+  zapRuns      ZapRun[]
+  webhookToken String   @unique @default(uuid()) @map("webhook_token")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@index([userId])
 }
 
 model Trigger {
-  id            String    @id @default(uuid())
-  zapId         String    @unique @map("zap_id")
-  zap           Zap       @relation(fields: [zapId], references: [id])
-  triggerId     String    @map("trigger_id")    
-  type          AvailableTrigger @relation(fields: [triggerId], references: [id])
-  
+  id        String           @id @default(uuid())
+  zapId     String           @unique @map("zap_id")
+  zap       Zap              @relation(fields: [zapId], references: [id], onDelete: Cascade)
+  triggerId String           @map("trigger_id")
+  type      AvailableTrigger @relation(fields: [triggerId], references: [id])
 }
 
 model AvailableTrigger {
-  id        String    @id @default(uuid())
-  name      String
-  image     String
-  triggers  Trigger[]
+  id       String    @id @default(uuid())
+  name     String
+  image    String
+  triggers Trigger[]
 }
 
 model Action {
-  id            String          @id @default(uuid())
-  zapId         String          @map("zap_id")
-  zap           Zap             @relation(fields: [zapId], references: [id])
-  actionId      String          @map("action_id")
-  metadata      Json            @default("{}")
-  type          AvailableAction @relation(fields: [actionId], references: [id])
-  sortingOrder  Int             @default(0) @map("sorting_order")
+  id           String          @id @default(uuid())
+  zapId        String          @map("zap_id")
+  zap          Zap             @relation(fields: [zapId], references: [id], onDelete: Cascade)
+  actionId     String          @map("action_id")
+  metadata     Json            @default("{}")
+  type         AvailableAction @relation(fields: [actionId], references: [id])
+  sortingOrder Int             @default(0) @map("sorting_order")
+  createdAt    DateTime        @default(now()) @map("created_at")
+  updatedAt    DateTime        @updatedAt @map("updated_at")
+
+  @@index([zapId, sortingOrder])
 }
 
 model AvailableAction {
-  id        String    @id @default(uuid())
-  name      String
-  image     String
-  actions   Action[]
+  id      String   @id @default(uuid())
+  name    String
+  image   String
+  actions Action[]
 }
 
 model ZapRun {
-  id            String   @id @default(uuid())
-  zapId         String   @map("zap_id")
-  zap           Zap      @relation(fields: [zapId], references: [id])
-  zapRunOutbox  ZapRunOutbox?
-  metadata      Json
+  id             String        @id @default(uuid())
+  zapId          String        @map("zap_id")
+  zap            Zap           @relation(fields: [zapId], references: [id], onDelete: Cascade)
+  zapRunOutbox   ZapRunOutbox?
+  metadata       Json
+  idempotencyKey String?       @map("idempotency_key")
+  createdAt      DateTime      @default(now()) @map("created_at")
+
+  @@unique([zapId, idempotencyKey])
+  @@index([zapId, createdAt])
 }
 
 model ZapRunOutbox {
   id        String   @id @default(uuid())
   zapRunId  String   @unique @map("zap_run_id")
-  zapRun    ZapRun   @relation(fields: [zapRunId], references: [id])
+  zapRun    ZapRun   @relation(fields: [zapRunId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt])
 }

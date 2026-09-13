@@ -17,6 +17,7 @@ export type Zap = {
   id: string;
   triggerId: string;
   userId: number;
+  webhookToken: string;
   actions: ZapAction[];
   trigger: {
     id: string;

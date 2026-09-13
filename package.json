@@ -7,16 +7,24 @@
     "docker:up": "docker compose up --build",
     "docker:down": "docker compose down",
     "lint": "turbo lint",
+    "check-types": "turbo check-types",
+    "test": "vitest run",
+    "verify": "npm run check-types && npm run test && npm run build",
+    "smoke": "node scripts/smoke.mjs",
     "format": "prettier --write \"**/*.{ts,tsx,md}\""
   },
   "devDependencies": {
+    "@vitest/coverage-v8": "^2.1.9",
     "esbuild": "^0.24.0",
+    "postcss": "8.4.49",
     "prettier": "^3.2.5",
     "turbo": "^2.3.3",
-    "typescript": "5.5.4"
+    "typescript": "5.5.4",
+    "vite": "^5.4.21",
+    "vitest": "^2.1.9"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   },
   "packageManager": "npm@10.8.1",
   "workspaces": [

@@ -13,8 +13,12 @@
   --purple: #503eb6;
 }
 
-* { box-sizing: border-box; }
-html { scroll-behavior: smooth; }
+* {
+  box-sizing: border-box;
+}
+html {
+  scroll-behavior: smooth;
+}
 
 body {
   margin: 0;
@@ -23,9 +27,17 @@ body {
   font-family: var(--font-geist-sans), Arial, sans-serif;
 }
 
-button, input, textarea { font: inherit; }
-button { color: inherit; }
-::selection { background: #ffd9c7; }
+button,
+input,
+textarea {
+  font: inherit;
+}
+button {
+  color: inherit;
+}
+::selection {
+  background: #ffd9c7;
+}
 
 .grid-canvas {
   background-color: #f7f5f2;
@@ -33,13 +45,31 @@ button { color: inherit; }
   background-size: 22px 22px;
 }
 
-.soft-shadow { box-shadow: 0 12px 35px rgba(52, 40, 33, 0.08); }
-.lift { transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease; }
-.lift:hover { transform: translateY(-2px); box-shadow: 0 12px 28px rgba(52, 40, 33, 0.1); }
-
-@keyframes fade-up {
-  from { opacity: 0; transform: translateY(12px); }
-  to { opacity: 1; transform: translateY(0); }
+.soft-shadow {
+  box-shadow: 0 12px 35px rgba(52, 40, 33, 0.08);
+}
+.lift {
+  transition:
+    transform 160ms ease,
+    box-shadow 160ms ease,
+    border-color 160ms ease;
+}
+.lift:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px rgba(52, 40, 33, 0.1);
 }
 
-.fade-up { animation: fade-up 420ms ease both; }
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-up {
+  animation: fade-up 420ms ease both;
+}

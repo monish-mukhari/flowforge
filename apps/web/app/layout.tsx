@@ -8,7 +8,8 @@ const geistSans = localFont({
 });
 export const metadata: Metadata = {
   title: "FlowForge — Automate your work",
-  description: "Build reliable webhook automations with email and Solana actions.",
+  description:
+    "Build reliable webhook automations with email and Solana actions.",
 };
 
 export default function RootLayout({

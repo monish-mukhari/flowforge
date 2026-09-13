@@ -33,7 +33,11 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .npm-cache/
+.npm-cache-codex/
 
 # Misc
 .DS_Store
 *.pem
+
+# Local project planning and progress (never commit)
+.project-local/

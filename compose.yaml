@@ -25,7 +25,7 @@ services:
       POSTGRES_PASSWORD: flowforge
       POSTGRES_DB: flowforge
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -52,7 +52,11 @@ services:
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
       KAFKA_NUM_PARTITIONS: 3
     healthcheck:
-      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null 2>&1"]
+      test:
+        [
+          "CMD-SHELL",
+          "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null 2>&1",
+        ]
       interval: 8s
       timeout: 8s
       retries: 15
@@ -61,7 +65,12 @@ services:
   migrate:
     <<: *app-service
     environment: *database-env
-    command: ["sh", "-c", "npm run migrate:deploy --workspace=@repo/db && npm run seed --workspace=@repo/db"]
+    command:
+      [
+        "sh",
+        "-c",
+        "npm run migrate:deploy --workspace=@repo/db && npm run seed --workspace=@repo/db",
+      ]
     depends_on:
       postgres:
         condition: service_healthy
@@ -74,14 +83,27 @@ services:
     environment:
       <<: *database-env
       PORT: 3002
+      APP_ENV: development
       JWT_PASSWORD: ${JWT_PASSWORD:-local-development-secret-change-me}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      APP_PUBLIC_URL: ${APP_PUBLIC_URL:-http://localhost:3000}
+      SMTP_ENDPOINT: mailpit
+      SMTP_PORT: 1025
+      EMAIL_FROM: ${EMAIL_FROM:-no-reply@flowforge.local}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
     ports:
       - "3002:3002"
     depends_on:
       migrate:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://localhost:3002/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:3002/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -92,13 +114,22 @@ services:
     environment:
       <<: *database-env
       PORT: 3001
+      APP_ENV: development
+      WEBHOOK_BODY_LIMIT: 256kb
+      LOG_LEVEL: ${LOG_LEVEL:-info}
     ports:
       - "3001:3001"
     depends_on:
       migrate:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://localhost:3001/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:3001/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -110,6 +141,7 @@ services:
       <<: *database-env
       KAFKA_BROKERS: kafka:9092
       SWEEP_INTERVAL_MS: 3000
+      LOG_LEVEL: ${LOG_LEVEL:-info}
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -126,6 +158,8 @@ services:
       SMTP_PORT: 1025
       SOL_PRIVATE_KEY: ${SOL_PRIVATE_KEY:-}
       SOLANA_RPC_URL: ${SOLANA_RPC_URL:-https://api.mainnet-beta.solana.com}
+      EMAIL_FROM: ${EMAIL_FROM:-no-reply@flowforge.local}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
     depends_on:
       migrate:
         condition: service_completed_successfully

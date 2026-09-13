@@ -1,38 +1,24 @@
-export function parse(text: string, values: any, startDelimeter = "{", endDelimeter = "}") {
-    let startIndex = 0;
-    let endIndex = 1;
-
-    let finalString = "";
-    while (endIndex < text.length) {
-        if (text[startIndex] === startDelimeter) {
-            let endPoint = startIndex + 2;
-            while (text[endPoint] !== endDelimeter) {
-                endPoint++;
-            }
-
-            let stringHoldingValue = text.slice(startIndex + 1, endPoint);
-            const keys = stringHoldingValue.split(".");
-            let localValues = {
-                ...values
-            }
-            for (let i = 0; i < keys.length; i++) {
-                if (typeof localValues === "string") {
-                    localValues = JSON.parse(localValues);
-                }
-                // @ts-ignore
-                localValues = localValues[keys[i]];
-            }
-            finalString += localValues;
-            startIndex = endPoint + 1;
-            endIndex = endPoint + 2;
-        } else {
-            finalString += text[startIndex];
-            startIndex++;
-            endIndex++;
-        }
-    }
-    if (text[startIndex]) {
-        finalString += text[startIndex]
-    }
-    return finalString;
+export function parse(text: string, values: unknown) {
+  if (typeof text !== "string") throw new Error("Template must be a string");
+  if (!values || typeof values !== "object" || Array.isArray(values))
+    throw new Error("Template values must be an object");
+  return text.replace(
+    /\{([a-zA-Z0-9_-]+(?:\.[a-zA-Z0-9_-]+)*)\}/g,
+    (_match, path: string) => {
+      let current: unknown = values;
+      for (const key of path.split(".")) {
+        if (
+          !current ||
+          typeof current !== "object" ||
+          Array.isArray(current) ||
+          !Object.prototype.hasOwnProperty.call(current, key)
+        )
+          throw new Error(`Template value not found: ${path}`);
+        current = (current as Record<string, unknown>)[key];
+      }
+      if (["string", "number", "boolean"].includes(typeof current))
+        return String(current);
+      throw new Error(`Template value must be scalar: ${path}`);
+    },
+  );
 }
