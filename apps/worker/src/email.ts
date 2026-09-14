@@ -13,13 +13,20 @@ const transport = nodemailer.createTransport({
     : undefined,
 });
 
-export async function sendEmail(to: string, body: string) {
+export async function sendEmail(
+  to: string,
+  body: string,
+  idempotencyKey?: string,
+) {
   const recipient = z.string().email().max(254).parse(to);
   const message = z.string().min(1).max(100_000).parse(body);
-  await transport.sendMail({
+  return transport.sendMail({
     from: process.env.EMAIL_FROM || "no-reply@flowforge.local",
     to: recipient,
     subject: "FlowForge workflow notification",
     text: message,
+    ...(idempotencyKey
+      ? { messageId: `<${idempotencyKey}@flowforge.local>` }
+      : {}),
   });
 }

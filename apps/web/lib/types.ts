@@ -39,3 +39,48 @@ export type Zap = {
   } | null;
   _count?: { versions: number };
 };
+
+export type RunAttempt = {
+  id: string;
+  attemptNumber: number;
+  status: "RUNNING" | "SUCCEEDED" | "FAILED" | "TIMED_OUT";
+  workerId: string;
+  errorCode: string | null;
+  errorMessage: string | null;
+  output: Record<string, unknown> | null;
+  startedAt: string;
+  completedAt: string | null;
+};
+
+export type RunStep = {
+  id: string;
+  sortingOrder: number;
+  actionType: string;
+  input: Record<string, unknown>;
+  output: Record<string, unknown> | null;
+  status:
+    | "PENDING"
+    | "RUNNING"
+    | "RETRY_SCHEDULED"
+    | "SUCCEEDED"
+    | "FAILED"
+    | "DEAD_LETTER";
+  attemptCount: number;
+  maxAttempts: number;
+  nextAttemptAt: string;
+  lastError: string | null;
+  attempts: RunAttempt[];
+};
+
+export type WorkflowRun = {
+  id: string;
+  status: "QUEUED" | "RUNNING" | "SUCCEEDED" | "FAILED" | "DEAD_LETTER";
+  metadata: Record<string, unknown>;
+  lastError: string | null;
+  replayOfId: string | null;
+  createdAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  workflowVersion: { version: number } | null;
+  steps: RunStep[];
+};

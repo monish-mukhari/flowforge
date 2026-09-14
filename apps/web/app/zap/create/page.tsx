@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState, type DragEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Brand } from "../../../components/Brand";
 import { AppIcon } from "../../../components/AppIcon";
 import { api, getErrorMessage } from "../../../lib/api";
 import type { AppOption, Zap } from "../../../lib/types";
+import { insertItem, reorderItem } from "../../../lib/workflow-order";
 
 type DraftAction = {
   key: number;
@@ -32,6 +33,11 @@ export default function CreateZap() {
   );
   const router = useRouter();
   const [editId, setEditId] = useState<string | null>(null);
+  const [dirty, setDirty] = useState(false);
+  const [autosaveState, setAutosaveState] = useState<
+    "idle" | "saving" | "saved" | "local" | "error"
+  >("idle");
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
 
   useEffect(() => {
     setEditId(new URLSearchParams(window.location.search).get("edit"));
@@ -64,6 +70,43 @@ export default function CreateZap() {
                 ),
               })),
           );
+          setDirty(false);
+        } else if (!editId) {
+          const saved = window.localStorage.getItem(
+            "flowforge:new-workflow-draft",
+          );
+          if (saved) {
+            try {
+              const draft = JSON.parse(saved) as {
+                name?: string;
+                triggerId?: string;
+                actions?: {
+                  appId?: string;
+                  metadata?: Record<string, string>;
+                }[];
+              };
+              if (draft.name) setName(draft.name);
+              if (draft.triggerId)
+                setTrigger(
+                  triggerResponse.data.availableTriggers.find(
+                    (item: AppOption) => item.id === draft.triggerId,
+                  ),
+                );
+              if (draft.actions?.length)
+                setActions(
+                  draft.actions.map((action, index) => ({
+                    key: Date.now() + index,
+                    app: actionResponse.data.availableActions.find(
+                      (item: AppOption) => item.id === action.appId,
+                    ),
+                    metadata: action.metadata ?? {},
+                  })),
+                );
+              setAutosaveState("local");
+            } catch {
+              window.localStorage.removeItem("flowforge:new-workflow-draft");
+            }
+          }
         }
       })
       .catch((caught) => {
@@ -73,7 +116,57 @@ export default function CreateZap() {
       .finally(() => setLoading(false));
   }, [editId, router]);
 
+  const validationErrors = useMemo(
+    () => validateDraft(name, trigger, actions),
+    [actions, name, trigger],
+  );
+
+  useEffect(() => {
+    const warnBeforeLeaving = (event: BeforeUnloadEvent) => {
+      if (!dirty) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warnBeforeLeaving);
+    return () => window.removeEventListener("beforeunload", warnBeforeLeaving);
+  }, [dirty]);
+
+  useEffect(() => {
+    if (loading || !dirty) return;
+    const timer = window.setTimeout(() => {
+      const localDraft = {
+        name,
+        triggerId: trigger?.id,
+        actions: actions.map((action) => ({
+          appId: action.app?.id,
+          metadata: action.metadata,
+        })),
+      };
+      window.localStorage.setItem(
+        editId
+          ? `flowforge:workflow-draft:${editId}`
+          : "flowforge:new-workflow-draft",
+        JSON.stringify(localDraft),
+      );
+      if (!editId || validationErrors.length) {
+        setAutosaveState("local");
+        return;
+      }
+      setAutosaveState("saving");
+      void api
+        .patch(`/api/v1/zap/${editId}`, buildPayload(name, trigger!, actions))
+        .then(() => {
+          setDirty(false);
+          setAutosaveState("saved");
+          window.localStorage.removeItem(`flowforge:workflow-draft:${editId}`);
+        })
+        .catch(() => setAutosaveState("error"));
+    }, 800);
+    return () => window.clearTimeout(timer);
+  }, [actions, dirty, editId, loading, name, trigger, validationErrors.length]);
+
   function updateAction(index: number, next: Partial<DraftAction>) {
+    setDirty(true);
     setActions((current) =>
       current.map((action, actionIndex) =>
         actionIndex === index ? { ...action, ...next } : action,
@@ -81,38 +174,54 @@ export default function CreateZap() {
     );
   }
 
+  function insertAction(index: number) {
+    setActions((current) => {
+      return insertItem(current, index, { key: Date.now(), metadata: {} });
+    });
+    setSelection({ kind: "action", index });
+    setDirty(true);
+  }
+
+  function moveDraftAction(from: number, to: number) {
+    if (from === to || to < 0 || to >= actions.length) return;
+    setActions((current) => {
+      return reorderItem(current, from, to);
+    });
+    setSelection({ kind: "action", index: to });
+    setDirty(true);
+  }
+
   async function save(mode: "draft" | "publish") {
-    const configuredActions = actions.filter((action) => action.app);
-    if (!trigger) {
-      setError("Choose a trigger before publishing.");
-      setSelection({ kind: "trigger" });
+    if (validationErrors.length) {
+      setError(validationErrors.join(" "));
+      if (!trigger) setSelection({ kind: "trigger" });
+      else {
+        const invalidIndex = actions.findIndex(
+          (action) => validateAction(action).length > 0,
+        );
+        if (invalidIndex >= 0)
+          setSelection({ kind: "action", index: invalidIndex });
+      }
       return;
     }
-    if (
-      configuredActions.length !== actions.length ||
-      configuredActions.length === 0
-    ) {
-      setError("Configure at least one action before publishing.");
+    if (!trigger) {
+      setError("Choose a trigger.");
+      setSelection({ kind: "trigger" });
       return;
     }
     setError("");
     setSavingMode(mode);
     try {
-      const payload = {
-        name,
-        availableTriggerId: trigger.id,
-        triggerMetadata: {},
-        actions: configuredActions.map((action) => ({
-          availableActionId: action.app!.id,
-          actionMetadata: action.metadata,
-        })),
-      };
+      const payload = buildPayload(name, trigger, actions);
       const response = editId
         ? await api.patch(`/api/v1/zap/${editId}`, payload)
         : await api.post("/api/v1/zap", payload);
       const workflowId = editId ?? response.data.zapId;
       if (mode === "publish")
         await api.post(`/api/v1/zap/${workflowId}/publish`);
+      setDirty(false);
+      window.localStorage.removeItem("flowforge:new-workflow-draft");
+      window.localStorage.removeItem(`flowforge:workflow-draft:${workflowId}`);
       router.push(`/zap/${workflowId}`);
     } catch (caught) {
       setError(getErrorMessage(caught));
@@ -139,13 +248,26 @@ export default function CreateZap() {
         <div className="absolute left-1/2 hidden -translate-x-1/2 text-center md:block">
           <input
             value={name}
-            onChange={(event) => setName(event.target.value)}
+            onChange={(event) => {
+              setName(event.target.value);
+              setDirty(true);
+            }}
             maxLength={120}
             aria-label="Workflow name"
             className="w-64 rounded-md border border-transparent bg-transparent px-2 text-center text-sm font-bold outline-none hover:border-[#d8d1ca] focus:border-[#503eb6]"
           />
           <div className="text-[10px] uppercase tracking-wider text-[#8d8580]">
-            Draft
+            {autosaveState === "saving"
+              ? "Saving…"
+              : autosaveState === "saved"
+                ? "All changes saved"
+                : autosaveState === "local"
+                  ? "Saved locally"
+                  : autosaveState === "error"
+                    ? "Autosave failed"
+                    : dirty
+                      ? "Unsaved changes"
+                      : "Draft"}
           </div>
         </div>
         <div className="flex gap-2">
@@ -189,9 +311,25 @@ export default function CreateZap() {
             complete={!!trigger}
             onClick={() => setSelection({ kind: "trigger" })}
           />
-          <Line />
+          <InsertLine onInsert={() => insertAction(0)} />
           {actions.map((action, index) => (
-            <div key={action.key}>
+            <div
+              key={action.key}
+              onDragOver={(event) => {
+                event.preventDefault();
+                event.dataTransfer.dropEffect = "move";
+              }}
+              onDrop={(event) => {
+                event.preventDefault();
+                if (draggedIndex !== null) moveDraftAction(draggedIndex, index);
+                setDraggedIndex(null);
+              }}
+              className={
+                draggedIndex !== null && draggedIndex !== index
+                  ? "rounded-2xl outline outline-2 outline-offset-4 outline-transparent hover:outline-[#8f7cff]"
+                  : ""
+              }
+            >
               <StepCard
                 number={index + 2}
                 label="Action"
@@ -207,6 +345,16 @@ export default function CreateZap() {
                 }
                 complete={!!action.app}
                 onClick={() => setSelection({ kind: "action", index })}
+                draggable
+                onDragStart={(event) => {
+                  setDraggedIndex(index);
+                  event.dataTransfer.effectAllowed = "move";
+                  event.dataTransfer.setData("text/plain", String(index));
+                }}
+                onDragEnd={() => setDraggedIndex(null)}
+                onMove={(direction) =>
+                  moveDraftAction(index, index + direction)
+                }
                 onRemove={
                   actions.length > 1
                     ? () => {
@@ -214,29 +362,14 @@ export default function CreateZap() {
                           current.filter((_, i) => i !== index),
                         );
                         setSelection(null);
+                        setDirty(true);
                       }
                     : undefined
                 }
               />
-              <Line />
+              <InsertLine onInsert={() => insertAction(index + 1)} />
             </div>
           ))}
-          <div className="flex justify-center">
-            <button
-              onClick={() => {
-                const index = actions.length;
-                setActions((current) => [
-                  ...current,
-                  { key: Date.now(), metadata: {} },
-                ]);
-                setSelection({ kind: "action", index });
-              }}
-              className="flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#2d2525] bg-white text-2xl font-medium shadow-sm hover:bg-[#2d2525] hover:text-white"
-              aria-label="Add action"
-            >
-              +
-            </button>
-          </div>
           {error && (
             <div className="mx-auto mt-8 max-w-md rounded-xl border border-red-200 bg-red-50 p-4 text-center text-sm font-medium text-red-700">
               {error}
@@ -276,7 +409,10 @@ export default function CreateZap() {
               <Chooser
                 items={triggers}
                 selectedId={trigger?.id}
-                onSelect={setTrigger}
+                onSelect={(app) => {
+                  setTrigger(app);
+                  setDirty(true);
+                }}
                 title="Trigger event"
               />
             )}
@@ -322,6 +458,10 @@ function StepCard({
   complete,
   onClick,
   onRemove,
+  draggable = false,
+  onDragStart,
+  onDragEnd,
+  onMove,
 }: {
   number: number;
   label: string;
@@ -332,12 +472,40 @@ function StepCard({
   complete: boolean;
   onClick: () => void;
   onRemove?: () => void;
+  draggable?: boolean;
+  onDragStart?: (event: DragEvent<HTMLButtonElement>) => void;
+  onDragEnd?: () => void;
+  onMove?: (direction: -1 | 1) => void;
 }) {
   return (
     <button
       onClick={onClick}
+      draggable={draggable}
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      onKeyDown={(event) => {
+        if (!onMove || !event.altKey) return;
+        if (event.key === "ArrowUp") {
+          event.preventDefault();
+          onMove(-1);
+        }
+        if (event.key === "ArrowDown") {
+          event.preventDefault();
+          onMove(1);
+        }
+      }}
       className={`soft-shadow relative flex w-full items-center gap-4 rounded-2xl border-2 bg-white p-5 text-left transition ${active ? "border-[#503eb6] ring-4 ring-[#e9e5ff]" : "border-[#d8d1ca] hover:border-[#8d8580]"}`}
+      aria-keyshortcuts={draggable ? "Alt+ArrowUp Alt+ArrowDown" : undefined}
     >
+      {draggable && (
+        <span
+          className="cursor-grab select-none text-xl leading-none text-[#8d8580] active:cursor-grabbing"
+          title="Drag to reorder. You can also press Alt + Up or Alt + Down."
+          aria-hidden="true"
+        >
+          ⠿
+        </span>
+      )}
       <AppIcon app={app} size="lg" />
       <div className="min-w-0 flex-1">
         <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#8d8580]">
@@ -368,8 +536,20 @@ function StepCard({
   );
 }
 
-function Line() {
-  return <div className="mx-auto h-10 w-0.5 bg-[#a9a19a]" />;
+function InsertLine({ onInsert }: { onInsert: () => void }) {
+  return (
+    <div className="group relative mx-auto flex h-12 w-full items-center justify-center">
+      <div className="absolute h-full w-0.5 bg-[#a9a19a]" />
+      <button
+        type="button"
+        onClick={onInsert}
+        className="relative z-10 flex h-7 w-7 items-center justify-center rounded-full border border-[#8d8580] bg-white text-lg leading-none text-[#6d6660] opacity-0 shadow-sm transition hover:border-[#503eb6] hover:text-[#503eb6] focus:opacity-100 group-hover:opacity-100"
+        aria-label="Insert an action here"
+      >
+        +
+      </button>
+    </div>
+  );
 }
 
 function Chooser({
@@ -545,4 +725,61 @@ function actionDescription(id: string, metadata: Record<string, string>) {
       ? `Transfer ${metadata.amount} SOL`
       : "Configure wallet and amount";
   return "Configured action";
+}
+
+function buildPayload(
+  name: string,
+  trigger: AppOption,
+  actions: DraftAction[],
+) {
+  return {
+    name: name.trim(),
+    availableTriggerId: trigger.id,
+    triggerMetadata: {},
+    actions: actions.map((action) => ({
+      availableActionId: action.app!.id,
+      actionMetadata: action.metadata,
+    })),
+  };
+}
+
+function validateAction(action: DraftAction) {
+  if (!action.app) return ["Choose an app for every action."];
+  if (action.app.id === "email") {
+    const errors: string[] = [];
+    const recipient = action.metadata.email?.trim() ?? "";
+    if (!recipient) errors.push("Email actions require a recipient.");
+    else if (
+      !recipient.includes("{") &&
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient)
+    )
+      errors.push("Enter a valid email recipient or payload template.");
+    if (!action.metadata.body?.trim())
+      errors.push("Email actions require a message.");
+    return errors;
+  }
+  if (action.app.id === "solana") {
+    const errors: string[] = [];
+    const address = action.metadata.address?.trim() ?? "";
+    const amount = action.metadata.amount?.trim() ?? "";
+    if (!address) errors.push("Solana actions require a wallet address.");
+    if (!amount) errors.push("Solana actions require an amount.");
+    else if (!amount.includes("{") && !(Number(amount) > 0))
+      errors.push("Solana amount must be positive or use a payload template.");
+    return errors;
+  }
+  return [];
+}
+
+function validateDraft(
+  name: string,
+  trigger: AppOption | undefined,
+  actions: DraftAction[],
+) {
+  const errors: string[] = [];
+  if (!name.trim()) errors.push("Give the workflow a name.");
+  if (!trigger) errors.push("Choose a trigger.");
+  if (!actions.length) errors.push("Add at least one action.");
+  actions.forEach((action) => errors.push(...validateAction(action)));
+  return [...new Set(errors)];
 }

@@ -10,6 +10,7 @@ export const openApiDocument = {
   tags: [
     { name: "Authentication" },
     { name: "Workflows" },
+    { name: "Runs" },
     { name: "Connectors" },
   ],
   components: {
@@ -148,6 +149,28 @@ export const openApiDocument = {
       get: {
         tags: ["Workflows"],
         summary: "List immutable versions",
+        security: [{ cookieAuth: [] }],
+      },
+    },
+    "/zap/{zapId}/runs": {
+      get: {
+        tags: ["Runs"],
+        summary: "List durable workflow runs and step attempts",
+        security: [{ cookieAuth: [] }],
+      },
+    },
+    "/zap/{zapId}/runs/{runId}": {
+      get: {
+        tags: ["Runs"],
+        summary: "Get a durable run with step and attempt details",
+        security: [{ cookieAuth: [] }],
+      },
+    },
+    "/zap/{zapId}/runs/{runId}/replay": {
+      post: {
+        tags: ["Runs"],
+        summary:
+          "Replay a failed or dead-letter run from its immutable snapshot",
         security: [{ cookieAuth: [] }],
       },
     },

@@ -49,6 +49,17 @@ const idempotencyHeader = z
   .max(200)
   .regex(/^[\x21-\x7E]+$/);
 const signatureHeader = z.string().regex(/^sha256=[a-f0-9]{64}$/i);
+const executionSnapshotSchema = z.object({
+  actions: z
+    .array(
+      z.object({
+        availableActionId: z.string().min(1),
+        actionMetadata: z.record(z.string(), z.unknown()),
+        sortingOrder: z.number().int().min(0),
+      }),
+    )
+    .min(1),
+});
 
 declare global {
   namespace Express {
@@ -185,19 +196,31 @@ const webhookHandler: RequestHandler = (req, res, next) => {
       },
     });
     if (!version) throw new Error("Published workflow version was not found");
+    const snapshot = executionSnapshotSchema.parse(version.definition);
     let duplicate = false;
+    const runId = randomUUID();
     try {
       await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-        const run = await tx.zapRun.create({
+        await tx.zapRun.create({
           data: {
+            id: runId,
             zapId,
             metadata: body as Prisma.InputJsonValue,
             idempotencyKey,
             workflowVersionId: version.id,
             definitionSnapshot: version.definition as Prisma.InputJsonValue,
+            status: "QUEUED",
+            steps: {
+              create: snapshot.actions.map((action) => ({
+                sortingOrder: action.sortingOrder,
+                actionType: action.availableActionId,
+                input: action.actionMetadata as Prisma.InputJsonValue,
+                idempotencyKey: `${runId}:${action.sortingOrder}`,
+              })),
+            },
+            zapRunOutbox: { create: { stage: 0 } },
           },
         });
-        await tx.zapRunOutbox.create({ data: { zapRunId: run.id } });
       });
     } catch (error: unknown) {
       if (idempotencyKey && (error as { code?: string })?.code === "P2002")
@@ -207,6 +230,7 @@ const webhookHandler: RequestHandler = (req, res, next) => {
     res.status(duplicate ? 200 : 202).json({
       message: duplicate ? "Webhook already accepted" : "Webhook accepted",
       duplicate,
+      ...(!duplicate ? { runId } : {}),
     });
   })().catch(next);
 };

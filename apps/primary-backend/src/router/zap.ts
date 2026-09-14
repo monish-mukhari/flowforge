@@ -1,7 +1,8 @@
 import { Router } from "express";
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 import prisma from "@repo/db/client";
+import { z } from "zod";
 import { asyncRoute, HttpError } from "../errors";
 import { authMiddleware } from "../middleware";
 import {
@@ -23,6 +24,24 @@ const workflowInclude = {
   trigger: { include: { type: true } },
   _count: { select: { versions: true } },
 } satisfies Prisma.ZapInclude;
+
+const runListQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(50).default(10),
+  status: z
+    .enum(["QUEUED", "RUNNING", "SUCCEEDED", "FAILED", "DEAD_LETTER"])
+    .optional(),
+});
+const runParamsSchema = ZapIdSchema.extend({ runId: z.string().uuid() });
+const replaySnapshotSchema = z.object({
+  actions: z.array(
+    z.object({
+      availableActionId: z.string(),
+      actionMetadata: z.record(z.string(), z.unknown()),
+      sortingOrder: z.number().int().min(0),
+    }),
+  ),
+});
 
 async function ensureAvailableConnectors(
   triggerId: string,
@@ -424,6 +443,142 @@ router.get(
       orderBy: { version: "desc" },
     });
     return res.json({ versions });
+  }),
+);
+
+router.get(
+  "/:zapId/runs",
+  authMiddleware,
+  asyncRoute(async (req, res) => {
+    const userId = req.userId!;
+    const { zapId } = ZapIdSchema.parse(req.params);
+    const query = runListQuerySchema.parse(req.query);
+    await findOwnedWorkflow(userId, zapId);
+    const where: Prisma.ZapRunWhereInput = {
+      zapId,
+      ...(query.status ? { status: query.status } : {}),
+    };
+    const [runs, total, statusCounts] = await Promise.all([
+      prisma.zapRun.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        skip: (query.page - 1) * query.pageSize,
+        take: query.pageSize,
+        include: {
+          steps: {
+            orderBy: { sortingOrder: "asc" },
+            include: { attempts: { orderBy: { attemptNumber: "asc" } } },
+          },
+          workflowVersion: { select: { version: true } },
+        },
+      }),
+      prisma.zapRun.count({ where }),
+      prisma.zapRun.groupBy({
+        by: ["status"],
+        where: { zapId },
+        _count: { _all: true },
+      }),
+    ]);
+    return res.json({
+      runs,
+      summary: Object.fromEntries(
+        statusCounts.map((entry) => [entry.status, entry._count._all]),
+      ),
+      pagination: {
+        page: query.page,
+        pageSize: query.pageSize,
+        total,
+        totalPages: Math.ceil(total / query.pageSize),
+      },
+    });
+  }),
+);
+
+router.get(
+  "/:zapId/runs/:runId",
+  authMiddleware,
+  asyncRoute(async (req, res) => {
+    const userId = req.userId!;
+    const { zapId, runId } = runParamsSchema.parse(req.params);
+    await findOwnedWorkflow(userId, zapId);
+    const run = await prisma.zapRun.findFirst({
+      where: { id: runId, zapId },
+      include: {
+        steps: {
+          orderBy: { sortingOrder: "asc" },
+          include: { attempts: { orderBy: { attemptNumber: "asc" } } },
+        },
+        workflowVersion: { select: { version: true } },
+      },
+    });
+    if (!run)
+      throw new HttpError(404, "RUN_NOT_FOUND", "Workflow run not found");
+    return res.json({ run });
+  }),
+);
+
+router.post(
+  "/:zapId/runs/:runId/replay",
+  authMiddleware,
+  asyncRoute(async (req, res) => {
+    const userId = req.userId!;
+    const { zapId, runId } = runParamsSchema.parse(req.params);
+    await findOwnedWorkflow(userId, zapId);
+    const source = await prisma.zapRun.findFirst({
+      where: { id: runId, zapId },
+      include: { steps: { orderBy: { sortingOrder: "asc" } } },
+    });
+    if (!source)
+      throw new HttpError(404, "RUN_NOT_FOUND", "Workflow run not found");
+    if (!source.definitionSnapshot)
+      throw new HttpError(
+        409,
+        "RUN_NOT_REPLAYABLE",
+        "This run has no saved execution snapshot",
+      );
+    if (!["FAILED", "DEAD_LETTER"].includes(source.status))
+      throw new HttpError(
+        409,
+        "RUN_NOT_FAILED",
+        "Only failed or dead-letter runs can be replayed",
+      );
+    const snapshot = replaySnapshotSchema.parse(source.definitionSnapshot);
+    const actions = source.steps.length
+      ? source.steps.map((step) => ({
+          sortingOrder: step.sortingOrder,
+          actionType: step.actionType,
+          input: step.input,
+          maxAttempts: step.maxAttempts,
+        }))
+      : snapshot.actions.map((action) => ({
+          sortingOrder: action.sortingOrder,
+          actionType: action.availableActionId,
+          input: action.actionMetadata as Prisma.InputJsonValue,
+          maxAttempts: 3,
+        }));
+    const replayId = randomUUID();
+    const replay = await prisma.zapRun.create({
+      data: {
+        id: replayId,
+        zapId,
+        workflowVersionId: source.workflowVersionId,
+        definitionSnapshot: source.definitionSnapshot as Prisma.InputJsonValue,
+        metadata: source.metadata as Prisma.InputJsonValue,
+        replayOfId: source.id,
+        steps: {
+          create: actions.map((action) => ({
+            sortingOrder: action.sortingOrder,
+            actionType: action.actionType,
+            input: action.input as Prisma.InputJsonValue,
+            maxAttempts: action.maxAttempts,
+            idempotencyKey: `${replayId}:${action.sortingOrder}`,
+          })),
+        },
+        zapRunOutbox: { create: { stage: 0 } },
+      },
+      include: { steps: { orderBy: { sortingOrder: "asc" } } },
+    });
+    return res.status(202).json({ run: replay });
   }),
 );
 

@@ -1,6 +1,7 @@
 const apiUrl = process.env.BACKEND_URL || "http://localhost:3002";
 const hooksUrl = process.env.HOOKS_URL || "http://localhost:3001/hooks/catch";
 const mailpitUrl = process.env.MAILPIT_URL || "http://localhost:8025";
+const workerUrl = process.env.WORKER_URL || "http://localhost:3003";
 const email = `smoke-${Date.now()}@example.com`;
 const password = "smoke-test-password";
 
@@ -42,6 +43,10 @@ async function mailWithSubject(subject) {
 await waitFor(
   async () => (await fetch(`${apiUrl}/health`).catch(() => undefined))?.ok,
   "primary API",
+);
+await waitFor(
+  async () => (await fetch(`${workerUrl}/health`).catch(() => undefined))?.ok,
+  "worker health endpoint",
 );
 await request(`${apiUrl}/api/v1/user/signup`, {
   method: "POST",
@@ -101,7 +106,7 @@ const workflow = (
 ).body.zap;
 const webhook = `${hooksUrl}/${workflow.id}/${workflow.webhookToken}`;
 const idempotencyKey = `smoke-${Date.now()}`;
-await request(webhook, {
+const acceptedWebhook = await request(webhook, {
   method: "POST",
   headers: {
     "content-type": "application/json",
@@ -124,6 +129,83 @@ await waitFor(
   "workflow delivery",
   90_000,
 );
+const completedRun = await waitFor(async () => {
+  const history = await request(`${apiUrl}/api/v1/zap/${workflow.id}/runs`, {
+    headers: { cookie: cookies },
+  });
+  return history.body.runs.find(
+    (run) =>
+      run.id === acceptedWebhook.body.runId && run.status === "SUCCEEDED",
+  );
+}, "durable successful run history");
+if (
+  completedRun.steps.length !== 1 ||
+  completedRun.steps[0].status !== "SUCCEEDED" ||
+  completedRun.steps[0].attempts.length !== 1
+)
+  throw new Error(
+    "Successful run did not persist its step and attempt records",
+  );
+
+const failing = await request(`${apiUrl}/api/v1/zap`, {
+  method: "POST",
+  headers: { "content-type": "application/json", cookie: cookies },
+  body: JSON.stringify({
+    name: "Reliable execution smoke failure",
+    availableTriggerId: "webhook",
+    actions: [
+      {
+        availableActionId: "email",
+        actionMetadata: {
+          email: "{event.missing}",
+          body: "This action should retry safely",
+        },
+      },
+    ],
+  }),
+});
+await request(`${apiUrl}/api/v1/zap/${failing.body.zapId}/publish`, {
+  method: "POST",
+  headers: { cookie: cookies },
+});
+const failingWorkflow = (
+  await request(`${apiUrl}/api/v1/zap/${failing.body.zapId}`, {
+    headers: { cookie: cookies },
+  })
+).body.zap;
+const failedAccepted = await request(
+  `${hooksUrl}/${failingWorkflow.id}/${failingWorkflow.webhookToken}`,
+  {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ event: {} }),
+  },
+);
+const deadLetterRun = await waitFor(
+  async () => {
+    const history = await request(
+      `${apiUrl}/api/v1/zap/${failingWorkflow.id}/runs`,
+      { headers: { cookie: cookies } },
+    );
+    return history.body.runs.find(
+      (run) =>
+        run.id === failedAccepted.body.runId && run.status === "DEAD_LETTER",
+    );
+  },
+  "retry exhaustion and dead-letter state",
+  90_000,
+);
+if (
+  deadLetterRun.steps[0]?.attemptCount !== 3 ||
+  deadLetterRun.steps[0]?.attempts.length !== 3
+)
+  throw new Error("Dead-letter run did not persist all retry attempts");
+const replay = await request(
+  `${apiUrl}/api/v1/zap/${failingWorkflow.id}/runs/${deadLetterRun.id}/replay`,
+  { method: "POST", headers: { cookie: cookies } },
+);
+if (replay.body.run.replayOfId !== deadLetterRun.id)
+  throw new Error("Run replay did not preserve replay lineage");
 await request(`${apiUrl}/api/v1/zap/${workflow.id}/pause`, {
   method: "POST",
   headers: { cookie: cookies },
@@ -136,4 +218,4 @@ await request(`${apiUrl}/api/v1/user/logout`, {
   method: "POST",
   headers: { cookie: cookies },
 });
-console.log(`Phase 0 smoke test passed for ${workflow.id}`);
+console.log(`Phase 2 smoke test passed for ${workflow.id}`);

@@ -158,7 +158,14 @@ services:
       SOL_PRIVATE_KEY: ${SOL_PRIVATE_KEY:-}
       SOLANA_RPC_URL: ${SOLANA_RPC_URL:-https://api.mainnet-beta.solana.com}
       EMAIL_FROM: ${EMAIL_FROM:-no-reply@flowforge.local}
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-4}
+      WORKER_LEASE_MS: ${WORKER_LEASE_MS:-30000}
+      ACTION_TIMEOUT_MS: ${ACTION_TIMEOUT_MS:-20000}
+      RETRY_BASE_MS: ${RETRY_BASE_MS:-1000}
+      METRICS_PORT: 3003
       LOG_LEVEL: ${LOG_LEVEL:-info}
+    ports:
+      - "3003:3003"
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -166,6 +173,17 @@ services:
         condition: service_healthy
       mailpit:
         condition: service_started
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:3003/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   mailpit:
     image: axllent/mailpit:latest

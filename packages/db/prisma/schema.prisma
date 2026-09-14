@@ -20,6 +20,30 @@ enum ZapStatus {
   ARCHIVED
 }
 
+enum ZapRunStatus {
+  QUEUED
+  RUNNING
+  SUCCEEDED
+  FAILED
+  DEAD_LETTER
+}
+
+enum RunStepStatus {
+  PENDING
+  RUNNING
+  RETRY_SCHEDULED
+  SUCCEEDED
+  FAILED
+  DEAD_LETTER
+}
+
+enum RunAttemptStatus {
+  RUNNING
+  SUCCEEDED
+  FAILED
+  TIMED_OUT
+}
+
 model User {
   id                      Int                      @id @default(autoincrement())
   name                    String
@@ -170,20 +194,77 @@ model ZapRun {
   workflowVersion    WorkflowVersion? @relation(fields: [workflowVersionId], references: [id], onDelete: SetNull)
   definitionSnapshot Json?            @map("definition_snapshot")
   zapRunOutbox       ZapRunOutbox?
+  steps              ZapRunStep[]
   metadata           Json
   idempotencyKey     String?          @map("idempotency_key")
+  status             ZapRunStatus     @default(QUEUED)
+  replayOfId         String?          @map("replay_of_id")
+  replayOf           ZapRun?          @relation("ZapRunReplays", fields: [replayOfId], references: [id], onDelete: SetNull)
+  replays            ZapRun[]         @relation("ZapRunReplays")
+  startedAt          DateTime?        @map("started_at")
+  completedAt        DateTime?        @map("completed_at")
+  lastError          String?          @map("last_error")
   createdAt          DateTime         @default(now()) @map("created_at")
+  updatedAt          DateTime         @updatedAt @map("updated_at")
 
   @@unique([zapId, idempotencyKey])
   @@index([zapId, createdAt])
   @@index([workflowVersionId])
+  @@index([zapId, status, createdAt])
+  @@index([replayOfId])
+}
+
+model ZapRunStep {
+  id             String          @id @default(uuid())
+  zapRunId       String          @map("zap_run_id")
+  zapRun         ZapRun          @relation(fields: [zapRunId], references: [id], onDelete: Cascade)
+  sortingOrder   Int             @map("sorting_order")
+  actionType     String          @map("action_type")
+  input          Json
+  output         Json?
+  status         RunStepStatus   @default(PENDING)
+  attemptCount   Int             @default(0) @map("attempt_count")
+  maxAttempts    Int             @default(3) @map("max_attempts")
+  nextAttemptAt  DateTime        @default(now()) @map("next_attempt_at")
+  leaseOwner     String?         @map("lease_owner")
+  leaseExpiresAt DateTime?       @map("lease_expires_at")
+  idempotencyKey String          @unique @map("idempotency_key")
+  lastError      String?         @map("last_error")
+  startedAt      DateTime?       @map("started_at")
+  completedAt    DateTime?       @map("completed_at")
+  createdAt      DateTime        @default(now()) @map("created_at")
+  updatedAt      DateTime        @updatedAt @map("updated_at")
+  attempts       ZapRunAttempt[]
+
+  @@unique([zapRunId, sortingOrder])
+  @@index([status, nextAttemptAt])
+  @@index([status, leaseExpiresAt])
+}
+
+model ZapRunAttempt {
+  id            String           @id @default(uuid())
+  zapRunStepId  String           @map("zap_run_step_id")
+  zapRunStep    ZapRunStep       @relation(fields: [zapRunStepId], references: [id], onDelete: Cascade)
+  attemptNumber Int              @map("attempt_number")
+  status        RunAttemptStatus @default(RUNNING)
+  workerId      String           @map("worker_id")
+  errorCode     String?          @map("error_code")
+  errorMessage  String?          @map("error_message")
+  output        Json?
+  startedAt     DateTime         @default(now()) @map("started_at")
+  completedAt   DateTime?        @map("completed_at")
+
+  @@unique([zapRunStepId, attemptNumber])
+  @@index([status, startedAt])
 }
 
 model ZapRunOutbox {
-  id        String   @id @default(uuid())
-  zapRunId  String   @unique @map("zap_run_id")
-  zapRun    ZapRun   @relation(fields: [zapRunId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now()) @map("created_at")
+  id          String   @id @default(uuid())
+  zapRunId    String   @unique @map("zap_run_id")
+  zapRun      ZapRun   @relation(fields: [zapRunId], references: [id], onDelete: Cascade)
+  stage       Int      @default(0)
+  availableAt DateTime @default(now()) @map("available_at")
+  createdAt   DateTime @default(now()) @map("created_at")
 
-  @@index([createdAt])
+  @@index([availableAt, createdAt])
 }

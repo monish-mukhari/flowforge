@@ -27,5 +27,5 @@ export async function sendSol(to: string, amount: string) {
     }),
   );
 
-  await sendAndConfirmTransaction(connection, transferTransaction, [keypair]);
+  return sendAndConfirmTransaction(connection, transferTransaction, [keypair]);
 }

@@ -6,7 +6,7 @@ import Link from "next/link";
 import { DashboardShell } from "../../../components/DashboardShell";
 import { AppIcon } from "../../../components/AppIcon";
 import { api, getErrorMessage } from "../../../lib/api";
-import type { Zap } from "../../../lib/types";
+import type { WorkflowRun, Zap } from "../../../lib/types";
 import { HOOKS_URL } from "../../config";
 
 export default function ZapDetails() {
@@ -22,6 +22,10 @@ export default function ZapDetails() {
     { id: string; version: number; publishedAt: string }[]
   >([]);
   const [capture, setCapture] = useState<Record<string, unknown> | null>(null);
+  const [runs, setRuns] = useState<WorkflowRun[]>([]);
+  const [runSummary, setRunSummary] = useState<Record<string, number>>({});
+  const [expandedRun, setExpandedRun] = useState<string | null>(null);
+  const [runFilter, setRunFilter] = useState("");
   const router = useRouter();
 
   useEffect(() => {
@@ -42,6 +46,28 @@ export default function ZapDetails() {
       .get(`/api/v1/zap/${zapId}/versions`)
       .then((response) => setVersions(response.data.versions));
   }, [zap, zapId]);
+
+  useEffect(() => {
+    if (!zap) return;
+    let active = true;
+    const loadRuns = () => {
+      const query = runFilter ? `?status=${runFilter}` : "";
+      void api
+        .get(`/api/v1/zap/${zapId}/runs${query}`)
+        .then((response) => {
+          if (!active) return;
+          setRuns(response.data.runs);
+          setRunSummary(response.data.summary);
+        })
+        .catch((caught) => active && setError(getErrorMessage(caught)));
+    };
+    loadRuns();
+    const interval = window.setInterval(loadRuns, 5000);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, [runFilter, zap, zapId]);
 
   const hookUrl = zap ? `${HOOKS_URL}/${zap.id}/${zap.webhookToken}` : "";
   const curl = `curl -X POST "${hookUrl}" -H "Content-Type: application/json" -d '{"customer":{"name":"Ada","email":"ada@example.com"},"payment":{"amount":"0.01"}}'`;
@@ -131,6 +157,22 @@ export default function ZapDetails() {
         `/api/v1/zap/${zapId}/test-captures/latest`,
       );
       setCapture(response.data.capture?.payload ?? null);
+    } catch (caught) {
+      setError(getErrorMessage(caught));
+    } finally {
+      setBusyAction("");
+    }
+  }
+
+  async function replayRun(runId: string) {
+    setBusyAction(`replay:${runId}`);
+    setError("");
+    try {
+      const response = await api.post(
+        `/api/v1/zap/${zapId}/runs/${runId}/replay`,
+      );
+      setRuns((current) => [response.data.run, ...current]);
+      setExpandedRun(response.data.run.id);
     } catch (caught) {
       setError(getErrorMessage(caught));
     } finally {
@@ -383,6 +425,147 @@ export default function ZapDetails() {
                 </div>
               </section>
             </div>
+            <section className="mt-8 rounded-2xl border border-[#e3ded8] bg-white p-5 sm:p-7">
+              <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+                <div>
+                  <h2 className="text-xl font-black">Run history</h2>
+                  <p className="mt-1 text-xs text-[#7d756f]">
+                    Durable runs, step attempts, retries, and replay status
+                    refresh every five seconds.
+                  </p>
+                </div>
+                <select
+                  value={runFilter}
+                  onChange={(event) => setRunFilter(event.target.value)}
+                  className="rounded-lg border border-[#d8d1ca] bg-white px-3 py-2 text-xs font-bold"
+                  aria-label="Filter runs by status"
+                >
+                  <option value="">All runs</option>
+                  {[
+                    "QUEUED",
+                    "RUNNING",
+                    "SUCCEEDED",
+                    "FAILED",
+                    "DEAD_LETTER",
+                  ].map((status) => (
+                    <option key={status} value={status}>
+                      {status.replace("_", " ")} ({runSummary[status] ?? 0})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {runs.length === 0 ? (
+                <div className="mt-5 rounded-xl bg-[#f7f5f2] p-5 text-sm text-[#6d6660]">
+                  No workflow runs match this filter yet.
+                </div>
+              ) : (
+                <div className="mt-5 space-y-3">
+                  {runs.map((run) => (
+                    <article
+                      key={run.id}
+                      className="overflow-hidden rounded-xl border border-[#e3ded8]"
+                    >
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setExpandedRun((current) =>
+                            current === run.id ? null : run.id,
+                          )
+                        }
+                        className="flex w-full flex-wrap items-center gap-3 p-4 text-left hover:bg-[#faf8f5]"
+                      >
+                        <RunStatus status={run.status} />
+                        <span className="font-mono text-xs text-[#6d6660]">
+                          {run.id.slice(0, 8)}
+                        </span>
+                        <span className="text-xs text-[#7d756f]">
+                          Version {run.workflowVersion?.version ?? "legacy"}
+                        </span>
+                        <span className="ml-auto text-xs text-[#7d756f]">
+                          {new Date(run.createdAt).toLocaleString()}
+                        </span>
+                      </button>
+                      {expandedRun === run.id && (
+                        <div className="border-t border-[#e3ded8] bg-[#faf8f5] p-4">
+                          {run.lastError && (
+                            <div className="mb-3 rounded-lg bg-red-50 p-3 text-xs text-red-700">
+                              {run.lastError}
+                            </div>
+                          )}
+                          <div className="space-y-2">
+                            {run.steps.map((step) => (
+                              <details
+                                key={step.id}
+                                className="rounded-lg border border-[#e3ded8] bg-white p-3"
+                              >
+                                <summary className="cursor-pointer text-sm font-bold">
+                                  {step.sortingOrder + 1}. {step.actionType} —{" "}
+                                  {step.status.replace("_", " ")} (
+                                  {step.attemptCount}/{step.maxAttempts}{" "}
+                                  attempts)
+                                </summary>
+                                <div className="mt-3 grid gap-3 md:grid-cols-2">
+                                  <JsonPanel
+                                    label="Resolved input template"
+                                    value={step.input}
+                                  />
+                                  <JsonPanel
+                                    label="Output"
+                                    value={step.output}
+                                  />
+                                </div>
+                                {step.attempts.length > 0 && (
+                                  <div className="mt-3 space-y-1 text-xs text-[#6d6660]">
+                                    {step.attempts.map((attempt) => (
+                                      <div
+                                        key={attempt.id}
+                                        className="flex flex-wrap gap-2"
+                                      >
+                                        <strong>
+                                          Attempt {attempt.attemptNumber}
+                                        </strong>
+                                        <span>
+                                          {attempt.status.replace("_", " ")}
+                                        </span>
+                                        {attempt.errorMessage && (
+                                          <span className="text-red-700">
+                                            {attempt.errorMessage}
+                                          </span>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </details>
+                            ))}
+                          </div>
+                          <details className="mt-3">
+                            <summary className="cursor-pointer text-xs font-bold text-[#503eb6]">
+                              View webhook payload
+                            </summary>
+                            <pre className="mt-2 max-h-56 overflow-auto rounded-lg bg-[#2d2525] p-3 font-mono text-xs text-white/80">
+                              {JSON.stringify(run.metadata, null, 2)}
+                            </pre>
+                          </details>
+                          {["FAILED", "DEAD_LETTER"].includes(run.status) && (
+                            <button
+                              type="button"
+                              onClick={() => replayRun(run.id)}
+                              disabled={busyAction === `replay:${run.id}`}
+                              className="mt-4 rounded-lg bg-[#ff4f00] px-4 py-2 text-xs font-bold text-white disabled:opacity-50"
+                            >
+                              {busyAction === `replay:${run.id}`
+                                ? "Replaying…"
+                                : "Replay failed run"}
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
             {versions.length > 0 && (
               <section className="mt-8 rounded-2xl border border-[#e3ded8] bg-white p-5 sm:p-7">
                 <h2 className="text-xl font-black">Published versions</h2>
@@ -405,6 +588,36 @@ export default function ZapDetails() {
         )}
       </main>
     </DashboardShell>
+  );
+}
+
+function RunStatus({ status }: { status: WorkflowRun["status"] }) {
+  const styles: Record<WorkflowRun["status"], string> = {
+    QUEUED: "bg-amber-100 text-amber-800",
+    RUNNING: "bg-blue-100 text-blue-800",
+    SUCCEEDED: "bg-emerald-100 text-emerald-800",
+    FAILED: "bg-red-100 text-red-800",
+    DEAD_LETTER: "bg-rose-950 text-white",
+  };
+  return (
+    <span
+      className={`rounded-full px-2.5 py-1 text-[10px] font-black ${styles[status]}`}
+    >
+      {status.replace("_", " ")}
+    </span>
+  );
+}
+
+function JsonPanel({ label, value }: { label: string; value: unknown }) {
+  return (
+    <div>
+      <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-[#8d8580]">
+        {label}
+      </div>
+      <pre className="max-h-44 overflow-auto rounded-lg bg-[#2d2525] p-3 font-mono text-[11px] text-white/80">
+        {value == null ? "—" : JSON.stringify(value, null, 2)}
+      </pre>
+    </div>
   );
 }
 
