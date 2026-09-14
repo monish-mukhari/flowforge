@@ -24,7 +24,10 @@ body {
   margin: 0;
   color: var(--ink);
   background: var(--paper);
-  font-family: var(--font-geist-sans), Arial, sans-serif;
+  font-family: var(--font-geist-mono), "Courier New", monospace;
+  font-feature-settings:
+    "ss02" 1,
+    "zero" 1;
 }
 
 button,
