@@ -1,7 +1,6 @@
 import "dotenv/config";
 import { Kafka } from "kafkajs";
 import prisma from "@repo/db/client";
-import type { JsonObject } from "@prisma/client/runtime/library";
 import pino from "pino";
 import { z } from "zod";
 import { parse } from "./parser";
@@ -21,6 +20,23 @@ const eventSchema = z
   .object({
     zapRunId: z.string().uuid(),
     stage: z.number().int().min(0).max(100),
+  })
+  .strict();
+const workflowSnapshotSchema = z
+  .object({
+    name: z.string(),
+    description: z.string().nullable().optional(),
+    trigger: z.object({
+      availableTriggerId: z.string(),
+      triggerMetadata: z.record(z.string(), z.unknown()).optional(),
+    }),
+    actions: z.array(
+      z.object({
+        availableActionId: z.string(),
+        actionMetadata: z.record(z.string(), z.unknown()),
+        sortingOrder: z.number().int().min(0),
+      }),
+    ),
   })
   .strict();
 const logger = pino({
@@ -50,35 +66,31 @@ async function main() {
       const { zapRunId, stage } = eventSchema.parse(JSON.parse(raw));
       const run = await prisma.zapRun.findUnique({
         where: { id: zapRunId },
-        include: {
-          zap: {
-            include: {
-              actions: {
-                include: { type: true },
-                orderBy: { sortingOrder: "asc" },
-              },
-            },
-          },
+        select: {
+          metadata: true,
+          definitionSnapshot: true,
         },
       });
       if (!run) throw new Error(`Run not found: ${zapRunId}`);
-      const action = run.zap.actions.find(
-        (item: { sortingOrder: number }) => item.sortingOrder === stage,
+      const snapshot = workflowSnapshotSchema.parse(run.definitionSnapshot);
+      const action = snapshot.actions.find(
+        (item) => item.sortingOrder === stage,
       );
       if (!action) throw new Error(`Action stage not found: ${stage}`);
-      const metadata = action.metadata as JsonObject;
-      if (action.type.id === "email")
+      const metadata = action.actionMetadata;
+      if (action.availableActionId === "email")
         await sendEmail(
           parse(String(metadata.email ?? ""), run.metadata),
           parse(String(metadata.body ?? ""), run.metadata),
         );
-      else if (action.type.id === "solana")
+      else if (action.availableActionId === "solana")
         await sendSol(
           parse(String(metadata.address ?? ""), run.metadata),
           parse(String(metadata.amount ?? ""), run.metadata),
         );
-      else throw new Error(`Unsupported action type: ${action.type.id}`);
-      if (stage < run.zap.actions.length - 1)
+      else
+        throw new Error(`Unsupported action type: ${action.availableActionId}`);
+      if (stage < snapshot.actions.length - 1)
         await producer.send({
           topic: "zap-events",
           messages: [
@@ -92,7 +104,7 @@ async function main() {
         { topic, partition, offset: String(Number(message.offset) + 1) },
       ]);
       logger.info(
-        { zapRunId, stage, actionType: action.type.id },
+        { zapRunId, stage, actionType: action.availableActionId },
         "workflow stage processed",
       );
     },

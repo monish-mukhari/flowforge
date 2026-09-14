@@ -13,6 +13,7 @@ export class HttpError extends Error {
     public readonly status: number,
     public readonly code: string,
     message: string,
+    public readonly details?: unknown,
   ) {
     super(message);
   }
@@ -71,9 +72,14 @@ export const errorHandler: ErrorRequestHandler = (
     return;
   }
   if (error instanceof HttpError) {
-    res
-      .status(error.status)
-      .json({ error: { code: error.code, message: error.message }, requestId });
+    res.status(error.status).json({
+      error: {
+        code: error.code,
+        message: error.message,
+        ...(error.details === undefined ? {} : { details: error.details }),
+      },
+      requestId,
+    });
     return;
   }
   logger.error({ err: error, requestId }, "request failed");

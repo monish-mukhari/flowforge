@@ -13,6 +13,13 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum ZapStatus {
+  DRAFT
+  PUBLISHED
+  PAUSED
+  ARCHIVED
+}
+
 model User {
   id                      Int                      @id @default(autoincrement())
   name                    String
@@ -67,18 +74,55 @@ model PasswordResetToken {
 }
 
 model Zap {
-  id           String   @id @default(uuid())
-  userId       Int      @map("user_id")
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  triggerId    String   @map("trigger_id")
-  trigger      Trigger?
-  actions      Action[]
-  zapRuns      ZapRun[]
-  webhookToken String   @unique @default(uuid()) @map("webhook_token")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  id               String               @id @default(uuid())
+  userId           Int                  @map("user_id")
+  user             User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name             String               @default("Untitled workflow")
+  description      String?
+  status           ZapStatus            @default(DRAFT)
+  triggerId        String               @map("trigger_id")
+  trigger          Trigger?
+  actions          Action[]
+  zapRuns          ZapRun[]
+  versions         WorkflowVersion[]
+  triggerCaptures  TestTriggerCapture[]
+  publishedVersion Int?                 @map("published_version")
+  publishedAt      DateTime?            @map("published_at")
+  pausedAt         DateTime?            @map("paused_at")
+  archivedAt       DateTime?            @map("archived_at")
+  webhookToken     String               @unique @default(uuid()) @map("webhook_token")
+  webhookSecret    String               @default(uuid()) @map("webhook_secret")
+  requireSignature Boolean              @default(false) @map("require_signature")
+  createdAt        DateTime             @default(now()) @map("created_at")
+  updatedAt        DateTime             @updatedAt @map("updated_at")
 
   @@index([userId])
+  @@index([userId, status, updatedAt])
+}
+
+model WorkflowVersion {
+  id          String   @id @default(uuid())
+  zapId       String   @map("zap_id")
+  zap         Zap      @relation(fields: [zapId], references: [id], onDelete: Cascade)
+  version     Int
+  definition  Json
+  publishedAt DateTime @default(now()) @map("published_at")
+  zapRuns     ZapRun[]
+
+  @@unique([zapId, version])
+  @@index([zapId, publishedAt])
+}
+
+model TestTriggerCapture {
+  id        String   @id @default(uuid())
+  zapId     String   @map("zap_id")
+  zap       Zap      @relation(fields: [zapId], references: [id], onDelete: Cascade)
+  payload   Json
+  createdAt DateTime @default(now()) @map("created_at")
+  expiresAt DateTime @map("expires_at")
+
+  @@index([zapId, createdAt])
+  @@index([expiresAt])
 }
 
 model Trigger {
@@ -86,6 +130,7 @@ model Trigger {
   zapId     String           @unique @map("zap_id")
   zap       Zap              @relation(fields: [zapId], references: [id], onDelete: Cascade)
   triggerId String           @map("trigger_id")
+  metadata  Json             @default("{}")
   type      AvailableTrigger @relation(fields: [triggerId], references: [id])
 }
 
@@ -118,16 +163,20 @@ model AvailableAction {
 }
 
 model ZapRun {
-  id             String        @id @default(uuid())
-  zapId          String        @map("zap_id")
-  zap            Zap           @relation(fields: [zapId], references: [id], onDelete: Cascade)
-  zapRunOutbox   ZapRunOutbox?
-  metadata       Json
-  idempotencyKey String?       @map("idempotency_key")
-  createdAt      DateTime      @default(now()) @map("created_at")
+  id                 String           @id @default(uuid())
+  zapId              String           @map("zap_id")
+  zap                Zap              @relation(fields: [zapId], references: [id], onDelete: Cascade)
+  workflowVersionId  String?          @map("workflow_version_id")
+  workflowVersion    WorkflowVersion? @relation(fields: [workflowVersionId], references: [id], onDelete: SetNull)
+  definitionSnapshot Json?            @map("definition_snapshot")
+  zapRunOutbox       ZapRunOutbox?
+  metadata           Json
+  idempotencyKey     String?          @map("idempotency_key")
+  createdAt          DateTime         @default(now()) @map("created_at")
 
   @@unique([zapId, idempotencyKey])
   @@index([zapId, createdAt])
+  @@index([workflowVersionId])
 }
 
 model ZapRunOutbox {

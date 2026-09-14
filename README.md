@@ -35,7 +35,7 @@ Local Compose explicitly runs the APIs in development mode and supplies an isola
 
 To use the Solana action, copy `.env.example` to `.env` and set `SOL_PRIVATE_KEY`. The implementation defaults to Solana mainnet; use `SOLANA_RPC_URL` to point it at a different RPC endpoint.
 
-Browser-facing backend URLs default to localhost. Override `NEXT_PUBLIC_BACKEND_URL` and `NEXT_PUBLIC_HOOKS_URL` before building when deploying remotely.
+Browser API calls use the web app's own origin and are proxied at runtime to keep authentication cookies first-party. Set `BACKEND_INTERNAL_URL` to the backend address reachable by the running web server. Docker Compose sets it to `http://primary-backend:3002`; host-side development defaults to `http://localhost:3002`. Override `NEXT_PUBLIC_HOOKS_URL` before building when deploying remotely.
 
 ## Accounts and sessions
 

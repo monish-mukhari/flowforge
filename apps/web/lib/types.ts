@@ -15,6 +15,17 @@ export type ZapAction = {
 
 export type Zap = {
   id: string;
+  name: string;
+  description: string | null;
+  status: "DRAFT" | "PUBLISHED" | "PAUSED" | "ARCHIVED";
+  publishedVersion: number | null;
+  publishedAt: string | null;
+  pausedAt: string | null;
+  archivedAt: string | null;
+  requireSignature: boolean;
+  webhookSecret: string;
+  createdAt: string;
+  updatedAt: string;
   triggerId: string;
   userId: number;
   webhookToken: string;
@@ -23,6 +34,8 @@ export type Zap = {
     id: string;
     zapId: string;
     triggerId: string;
+    metadata?: Record<string, unknown>;
     type: AppOption;
   } | null;
+  _count?: { versions: number };
 };
