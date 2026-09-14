@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Brand } from "../../../components/Brand";
 import { AppIcon } from "../../../components/AppIcon";
 import { api, getErrorMessage } from "../../../lib/api";
-import type { AppOption } from "../../../lib/types";
+import type { AppOption, Zap } from "../../../lib/types";
 
 type DraftAction = {
   key: number;
@@ -15,6 +15,7 @@ type DraftAction = {
 type Selection = { kind: "trigger" } | { kind: "action"; index: number };
 
 export default function CreateZap() {
+  const [name, setName] = useState("Untitled workflow");
   const [triggers, setTriggers] = useState<AppOption[]>([]);
   const [availableActions, setAvailableActions] = useState<AppOption[]>([]);
   const [trigger, setTrigger] = useState<AppOption>();
@@ -26,24 +27,51 @@ export default function CreateZap() {
   });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
-  const [publishing, setPublishing] = useState(false);
+  const [savingMode, setSavingMode] = useState<"draft" | "publish" | null>(
+    null,
+  );
   const router = useRouter();
+  const [editId, setEditId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setEditId(new URLSearchParams(window.location.search).get("edit"));
+  }, []);
 
   useEffect(() => {
     Promise.all([
       api.get("/api/v1/trigger/available"),
       api.get("/api/v1/action/available"),
+      editId ? api.get(`/api/v1/zap/${editId}`) : Promise.resolve(null),
     ])
-      .then(([triggerResponse, actionResponse]) => {
+      .then(([triggerResponse, actionResponse, workflowResponse]) => {
         setTriggers(triggerResponse.data.availableTriggers);
         setAvailableActions(actionResponse.data.availableActions);
+        const workflow = workflowResponse?.data.zap as Zap | undefined;
+        if (workflow) {
+          setName(workflow.name);
+          setTrigger(workflow.trigger?.type);
+          setActions(
+            [...workflow.actions]
+              .sort((a, b) => a.sortingOrder - b.sortingOrder)
+              .map((action, index) => ({
+                key: index + 1,
+                app: action.type,
+                metadata: Object.fromEntries(
+                  Object.entries(action.metadata ?? {}).map(([key, value]) => [
+                    key,
+                    String(value),
+                  ]),
+                ),
+              })),
+          );
+        }
       })
       .catch((caught) => {
         if (caught.response?.status === 401) router.replace("/login");
         else setError(getErrorMessage(caught));
       })
       .finally(() => setLoading(false));
-  }, [router]);
+  }, [editId, router]);
 
   function updateAction(index: number, next: Partial<DraftAction>) {
     setActions((current) =>
@@ -53,7 +81,7 @@ export default function CreateZap() {
     );
   }
 
-  async function publish() {
+  async function save(mode: "draft" | "publish") {
     const configuredActions = actions.filter((action) => action.app);
     if (!trigger) {
       setError("Choose a trigger before publishing.");
@@ -68,20 +96,27 @@ export default function CreateZap() {
       return;
     }
     setError("");
-    setPublishing(true);
+    setSavingMode(mode);
     try {
-      const response = await api.post("/api/v1/zap", {
+      const payload = {
+        name,
         availableTriggerId: trigger.id,
         triggerMetadata: {},
         actions: configuredActions.map((action) => ({
           availableActionId: action.app!.id,
           actionMetadata: action.metadata,
         })),
-      });
-      router.push(`/zap/${response.data.zapId}`);
+      };
+      const response = editId
+        ? await api.patch(`/api/v1/zap/${editId}`, payload)
+        : await api.post("/api/v1/zap", payload);
+      const workflowId = editId ?? response.data.zapId;
+      if (mode === "publish")
+        await api.post(`/api/v1/zap/${workflowId}/publish`);
+      router.push(`/zap/${workflowId}`);
     } catch (caught) {
       setError(getErrorMessage(caught));
-      setPublishing(false);
+      setSavingMode(null);
     }
   }
 
@@ -102,18 +137,33 @@ export default function CreateZap() {
           </button>
         </div>
         <div className="absolute left-1/2 hidden -translate-x-1/2 text-center md:block">
-          <div className="text-sm font-bold">Untitled workflow</div>
+          <input
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            maxLength={120}
+            aria-label="Workflow name"
+            className="w-64 rounded-md border border-transparent bg-transparent px-2 text-center text-sm font-bold outline-none hover:border-[#d8d1ca] focus:border-[#503eb6]"
+          />
           <div className="text-[10px] uppercase tracking-wider text-[#8d8580]">
             Draft
           </div>
         </div>
-        <button
-          onClick={publish}
-          disabled={publishing || loading}
-          className="rounded-lg bg-[#ff4f00] px-5 py-2.5 text-sm font-bold text-white hover:bg-[#d94100] disabled:opacity-50"
-        >
-          {publishing ? "Publishing…" : "Publish"}
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => save("draft")}
+            disabled={savingMode !== null || loading}
+            className="rounded-lg border border-[#bdb5ae] bg-white px-4 py-2.5 text-sm font-bold hover:bg-[#f7f5f2] disabled:opacity-50"
+          >
+            {savingMode === "draft" ? "Saving…" : "Save draft"}
+          </button>
+          <button
+            onClick={() => save("publish")}
+            disabled={savingMode !== null || loading}
+            className="rounded-lg bg-[#ff4f00] px-5 py-2.5 text-sm font-bold text-white hover:bg-[#d94100] disabled:opacity-50"
+          >
+            {savingMode === "publish" ? "Publishing…" : "Publish"}
+          </button>
+        </div>
       </header>
 
       <section

@@ -59,7 +59,12 @@ export default function Dashboard() {
         </div>
         {!loading && !error && zaps.length > 0 && (
           <div className="mt-8 grid gap-4 sm:grid-cols-3">
-            <Stat value={String(zaps.length)} label="Published workflows" />
+            <Stat
+              value={String(
+                zaps.filter((zap) => zap.status === "PUBLISHED").length,
+              )}
+              label="Published workflows"
+            />
             <Stat
               value={String(
                 zaps.reduce((count, zap) => count + zap.actions.length, 0),
@@ -132,7 +137,7 @@ export default function Dashboard() {
                     ))}
                   </div>
                   <div className="min-w-0">
-                    <div className="truncate font-bold">Webhook workflow</div>
+                    <div className="truncate font-bold">{zap.name}</div>
                     <div className="mt-1 truncate font-mono text-xs text-[#8d8580]">
                       {zap.id}
                     </div>
@@ -147,8 +152,10 @@ export default function Dashboard() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="rounded-full bg-[#dff7e8] px-3 py-1.5 text-xs font-bold text-[#126b38]">
-                    ● Published
+                  <span
+                    className={`rounded-full px-3 py-1.5 text-xs font-bold ${statusStyle(zap.status)}`}
+                  >
+                    {zap.status}
                   </span>
                   <button
                     onClick={() => copyHook(zap)}
@@ -169,6 +176,13 @@ export default function Dashboard() {
       </main>
     </DashboardShell>
   );
+}
+
+function statusStyle(status: Zap["status"]) {
+  if (status === "PUBLISHED") return "bg-[#dff7e8] text-[#126b38]";
+  if (status === "PAUSED") return "bg-amber-100 text-amber-800";
+  if (status === "ARCHIVED") return "bg-slate-200 text-slate-700";
+  return "bg-[#eee9ff] text-[#503eb6]";
 }
 
 function Stat({

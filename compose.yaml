@@ -10,7 +10,6 @@ x-app-service: &app-service
   build:
     context: .
     args:
-      NEXT_PUBLIC_BACKEND_URL: ${NEXT_PUBLIC_BACKEND_URL:-http://localhost:3002}
       NEXT_PUBLIC_HOOKS_URL: ${NEXT_PUBLIC_HOOKS_URL:-http://localhost:3001/hooks/catch}
 
 x-database-env: &database-env
@@ -85,7 +84,7 @@ services:
       PORT: 3002
       APP_ENV: development
       JWT_PASSWORD: ${JWT_PASSWORD:-local-development-secret-change-me}
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
       APP_PUBLIC_URL: ${APP_PUBLIC_URL:-http://localhost:3000}
       SMTP_ENDPOINT: mailpit
       SMTP_PORT: 1025
@@ -180,6 +179,7 @@ services:
     command: ["npm", "run", "start", "--workspace=web", "--", "-H", "0.0.0.0"]
     environment:
       PORT: 3000
+      BACKEND_INTERNAL_URL: http://primary-backend:3002
     ports:
       - "3000:3000"
     depends_on:

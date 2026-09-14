@@ -7,7 +7,9 @@ const schema = z.object({
   PORT: z.coerce.number().int().min(1).max(65535).default(3002),
   DATABASE_URL: z.string().min(1),
   JWT_PASSWORD: z.string().min(32).optional(),
-  CORS_ORIGINS: z.string().default("http://localhost:3000"),
+  CORS_ORIGINS: z
+    .string()
+    .default("http://localhost:3000,http://127.0.0.1:3000"),
   ACCESS_TOKEN_TTL_MINUTES: z.coerce.number().int().min(1).max(60).default(15),
   REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().min(1).max(90).default(7),
   APP_PUBLIC_URL: z.string().url().default("http://localhost:3000"),

@@ -12,6 +12,7 @@ import { randomUUID } from "node:crypto";
 import { config } from "./config";
 import { errorHandler, notFoundHandler } from "./errors";
 import { logger } from "./logger";
+import { openApiDocument } from "./openapi";
 
 export const app = express();
 app.disable("x-powered-by");
@@ -52,6 +53,10 @@ app.use(
 
 app.get("/health", (_req, res) => {
   res.json({ status: "ok", service: "primary-backend" });
+});
+
+app.get("/openapi.json", (_req, res) => {
+  res.json(openApiDocument);
 });
 
 app.use(

@@ -90,25 +90,48 @@ const created = await request(`${apiUrl}/api/v1/zap`, {
     ],
   }),
 });
+await request(`${apiUrl}/api/v1/zap/${created.body.zapId}/publish`, {
+  method: "POST",
+  headers: { cookie: cookies },
+});
 const workflow = (
   await request(`${apiUrl}/api/v1/zap/${created.body.zapId}`, {
     headers: { cookie: cookies },
   })
 ).body.zap;
 const webhook = `${hooksUrl}/${workflow.id}/${workflow.webhookToken}`;
+const idempotencyKey = `smoke-${Date.now()}`;
 await request(webhook, {
   method: "POST",
   headers: {
     "content-type": "application/json",
-    "idempotency-key": `smoke-${Date.now()}`,
+    "idempotency-key": idempotencyKey,
   },
   body: JSON.stringify({ event: { id: "passed" } }),
 });
+const duplicateWebhook = await request(webhook, {
+  method: "POST",
+  headers: {
+    "content-type": "application/json",
+    "idempotency-key": idempotencyKey,
+  },
+  body: JSON.stringify({ event: { id: "passed" } }),
+});
+if (!duplicateWebhook.body.duplicate)
+  throw new Error("Repeated webhook was not reported as duplicate");
 await waitFor(
   () => mailWithSubject("FlowForge workflow notification"),
   "workflow delivery",
   90_000,
 );
+await request(`${apiUrl}/api/v1/zap/${workflow.id}/pause`, {
+  method: "POST",
+  headers: { cookie: cookies },
+});
+await request(`${apiUrl}/api/v1/zap/${workflow.id}/resume`, {
+  method: "POST",
+  headers: { cookie: cookies },
+});
 await request(`${apiUrl}/api/v1/user/logout`, {
   method: "POST",
   headers: { cookie: cookies },
