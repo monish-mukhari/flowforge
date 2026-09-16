@@ -152,6 +152,13 @@ export const openApiDocument = {
         security: [{ cookieAuth: [] }],
       },
     },
+    "/zap/runs": {
+      get: {
+        tags: ["Runs"],
+        summary: "List runs across the signed-in user's workflows",
+        security: [{ cookieAuth: [] }],
+      },
+    },
     "/zap/{zapId}/runs": {
       get: {
         tags: ["Runs"],

@@ -15,6 +15,11 @@ export const metadata: Metadata = {
   title: "FlowForge — Automate your work",
   description:
     "Build reliable webhook automations with email and Solana actions.",
+  icons: {
+    icon: "/icon.svg",
+    shortcut: "/icon.svg",
+    apple: "/icon.svg",
+  },
 };
 
 export default function RootLayout({

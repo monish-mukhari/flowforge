@@ -1,7 +1,7 @@
 import type { AppOption } from "../lib/types";
 
 const colors: Record<string, string> = {
-  webhook: "bg-[#ff4f00]",
+  webhook: "bg-gradient-to-br from-[#7c3aed] via-[#c026d3] to-[#ec4899]",
   email: "bg-[#e84d3c]",
   solana: "bg-[#111111]",
 };
@@ -14,22 +14,17 @@ function WebhookIcon() {
       fill="none"
       aria-hidden="true"
     >
-      <circle cx="12" cy="5" r="2.25" fill="currentColor" />
-      <circle cx="6" cy="16.5" r="2.25" fill="currentColor" />
-      <circle cx="18" cy="16.5" r="2.25" fill="currentColor" />
+      <circle cx="12" cy="4.5" r="2.15" fill="currentColor" />
+      <circle cx="5.5" cy="17" r="2.15" fill="currentColor" />
+      <circle cx="18.5" cy="17" r="2.15" fill="currentColor" />
       <path
-        d="M12 7.25v2.1m-1.35.8-3.2 4.15m5.9-4.15 3.2 4.15M8.25 17.15h7.5"
+        d="M12 6.7v3.1m-1.8 3.1-2.8 2.2m6.4-2.2 2.8 2.2"
         stroke="currentColor"
-        strokeWidth="2"
+        strokeWidth="2.15"
         strokeLinecap="round"
+        strokeLinejoin="round"
       />
-      <circle
-        cx="12"
-        cy="12"
-        r="3.25"
-        stroke="currentColor"
-        strokeWidth="1.5"
-      />
+      <circle cx="12" cy="12" r="2.35" fill="none" stroke="currentColor" strokeWidth="2.15" />
     </svg>
   );
 }

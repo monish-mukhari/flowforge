@@ -8,8 +8,9 @@
   --paper: #fffdf9;
   --panel: #ffffff;
   --line: #e3ded8;
-  --orange: #ff4f00;
-  --orange-dark: #d94100;
+  --orange: #7c3aed;
+  --orange-dark: #a21caf;
+  --primary-gradient: linear-gradient(115deg, #7c3aed, #c026d3 52%, #ec4899);
   --purple: #503eb6;
 }
 
@@ -39,8 +40,31 @@ button {
   color: inherit;
 }
 ::selection {
-  background: #ffd9c7;
+  background: #f3d8ff;
 }
+
+/* Legacy orange utility classes now use the shared purple/pink brand gradient. */
+.bg-\[\#ff4f00\] { background-image: var(--primary-gradient); }
+.hover\:bg-\[\#d94100\]:hover { background-image: linear-gradient(115deg, #6d28d9, #a21caf 52%, #db2777); }
+.text-\[\#ff4f00\] { color: #7c3aed; }
+.text-\[\#d94100\] { color: #a21caf; }
+.bg-\[\#fff0e8\] { background-color: #f6edff; }
+
+html.dark body { background: #17131d; color: #f7f1ff; }
+html.dark .bg-\[\#f7f5f2\] { background-color: #17131d; }
+html.dark .bg-white { background-color: #211b29 !important; }
+html.dark .bg-white\/95 { background-color: rgb(33 27 41 / 0.95) !important; }
+html.dark .border-\[\#e3ded8\],
+html.dark .border-\[\#d9d3cc\],
+html.dark .border-\[\#d8d1ca\] { border-color: #41364e !important; }
+html.dark .text-\[\#2d2525\] { color: #f7f1ff; }
+html.dark .text-\[\#6d6660\],
+html.dark .text-\[\#817972\],
+html.dark .text-\[\#7d756f\] { color: #b9acc5; }
+html.dark .hover\:bg-\[\#f7f5f2\]:hover { background-color: #2c2337; }
+html.dark .bg-\[\#f1eeea\] { background-color: #332542; }
+html.dark input, html.dark textarea, html.dark select { color: #f7f1ff; }
+html.dark .bg-\[\#faf9f7\], html.dark .bg-\[\#faf8f5\] { background-color: #251e30; }
 
 .grid-canvas {
   background-color: #f7f5f2;

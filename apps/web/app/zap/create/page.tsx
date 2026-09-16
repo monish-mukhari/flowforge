@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState, type DragEvent } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useEffect, useMemo, useState, type DragEvent } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Brand } from "../../../components/Brand";
 import { AppIcon } from "../../../components/AppIcon";
 import { api, getErrorMessage } from "../../../lib/api";
@@ -15,7 +15,7 @@ type DraftAction = {
 };
 type Selection = { kind: "trigger" } | { kind: "action"; index: number };
 
-export default function CreateZap() {
+function CreateZapContent() {
   const [name, setName] = useState("Untitled workflow");
   const [triggers, setTriggers] = useState<AppOption[]>([]);
   const [availableActions, setAvailableActions] = useState<AppOption[]>([]);
@@ -32,7 +32,8 @@ export default function CreateZap() {
     null,
   );
   const router = useRouter();
-  const [editId, setEditId] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+  const editId = searchParams.get("edit");
   const [dirty, setDirty] = useState(false);
   const [autosaveState, setAutosaveState] = useState<
     "idle" | "saving" | "saved" | "local" | "error"
@@ -40,16 +41,26 @@ export default function CreateZap() {
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
 
   useEffect(() => {
-    setEditId(new URLSearchParams(window.location.search).get("edit"));
-  }, []);
-
-  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setError("");
+    setSavingMode(null);
+    if (!editId) {
+      setName("Untitled workflow");
+      setTrigger(undefined);
+      setActions([{ key: Date.now(), metadata: {} }]);
+      setSelection({ kind: "trigger" });
+      setDirty(false);
+      setAutosaveState("idle");
+      window.localStorage.removeItem("flowforge:new-workflow-draft");
+    }
     Promise.all([
       api.get("/api/v1/trigger/available"),
       api.get("/api/v1/action/available"),
       editId ? api.get(`/api/v1/zap/${editId}`) : Promise.resolve(null),
     ])
       .then(([triggerResponse, actionResponse, workflowResponse]) => {
+        if (!active) return;
         setTriggers(triggerResponse.data.availableTriggers);
         setAvailableActions(actionResponse.data.availableActions);
         const workflow = workflowResponse?.data.zap as Zap | undefined;
@@ -71,49 +82,19 @@ export default function CreateZap() {
               })),
           );
           setDirty(false);
-        } else if (!editId) {
-          const saved = window.localStorage.getItem(
-            "flowforge:new-workflow-draft",
-          );
-          if (saved) {
-            try {
-              const draft = JSON.parse(saved) as {
-                name?: string;
-                triggerId?: string;
-                actions?: {
-                  appId?: string;
-                  metadata?: Record<string, string>;
-                }[];
-              };
-              if (draft.name) setName(draft.name);
-              if (draft.triggerId)
-                setTrigger(
-                  triggerResponse.data.availableTriggers.find(
-                    (item: AppOption) => item.id === draft.triggerId,
-                  ),
-                );
-              if (draft.actions?.length)
-                setActions(
-                  draft.actions.map((action, index) => ({
-                    key: Date.now() + index,
-                    app: actionResponse.data.availableActions.find(
-                      (item: AppOption) => item.id === action.appId,
-                    ),
-                    metadata: action.metadata ?? {},
-                  })),
-                );
-              setAutosaveState("local");
-            } catch {
-              window.localStorage.removeItem("flowforge:new-workflow-draft");
-            }
-          }
         }
       })
       .catch((caught) => {
+        if (!active) return;
         if (caught.response?.status === 401) router.replace("/login");
         else setError(getErrorMessage(caught));
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
   }, [editId, router]);
 
   const validationErrors = useMemo(
@@ -445,6 +426,14 @@ export default function CreateZap() {
         </aside>
       )}
     </main>
+  );
+}
+
+export default function CreateZap() {
+  return (
+    <Suspense fallback={<main className="min-h-screen bg-[#f7f5f2]" />}>
+      <CreateZapContent />
+    </Suspense>
   );
 }
 

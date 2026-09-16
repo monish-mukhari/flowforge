@@ -495,6 +495,53 @@ router.get(
 );
 
 router.get(
+  "/runs",
+  authMiddleware,
+  asyncRoute(async (req, res) => {
+    const userId = req.userId!;
+    const query = runListQuerySchema.parse(req.query);
+    const where: Prisma.ZapRunWhereInput = {
+      zap: { userId },
+      ...(query.status ? { status: query.status } : {}),
+    };
+    const [runs, total, statusCounts] = await Promise.all([
+      prisma.zapRun.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        skip: (query.page - 1) * query.pageSize,
+        take: query.pageSize,
+        include: {
+          zap: { select: { id: true, name: true } },
+          steps: {
+            orderBy: { sortingOrder: "asc" },
+            include: { attempts: { orderBy: { attemptNumber: "asc" } } },
+          },
+          workflowVersion: { select: { version: true } },
+        },
+      }),
+      prisma.zapRun.count({ where }),
+      prisma.zapRun.groupBy({
+        by: ["status"],
+        where: { zap: { userId } },
+        _count: { _all: true },
+      }),
+    ]);
+    return res.json({
+      runs,
+      summary: Object.fromEntries(
+        statusCounts.map((entry) => [entry.status, entry._count._all]),
+      ),
+      pagination: {
+        page: query.page,
+        pageSize: query.pageSize,
+        total,
+        totalPages: Math.ceil(total / query.pageSize),
+      },
+    });
+  }),
+);
+
+router.get(
   "/:zapId/runs/:runId",
   authMiddleware,
   asyncRoute(async (req, res) => {

@@ -83,4 +83,5 @@ export type WorkflowRun = {
   completedAt: string | null;
   workflowVersion: { version: number } | null;
   steps: RunStep[];
+  zap?: { id: string; name: string };
 };
