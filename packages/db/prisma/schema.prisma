@@ -56,6 +56,18 @@ model User {
   sessions                AuthSession[]
   emailVerificationTokens EmailVerificationToken[]
   passwordResetTokens     PasswordResetToken[]
+  solanaWallet            SolanaWallet?
+}
+
+model SolanaWallet {
+  id                    String   @id @default(uuid())
+  userId                Int      @unique @map("user_id")
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  publicKey             String   @unique @map("public_key")
+  encryptedSecretKey    String   @map("encrypted_secret_key")
+  network               String   @default("devnet")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
 }
 
 model AuthSession {

@@ -39,6 +39,11 @@ function CreateZapContent() {
     "idle" | "saving" | "saved" | "local" | "error"
   >("idle");
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [solanaWallet, setSolanaWallet] = useState<{
+    publicKey: string;
+    network: string;
+  } | null>(null);
+  const [walletBusy, setWalletBusy] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -57,12 +62,14 @@ function CreateZapContent() {
     Promise.all([
       api.get("/api/v1/trigger/available"),
       api.get("/api/v1/action/available"),
+      api.get("/api/v1/user/solana-wallet"),
       editId ? api.get(`/api/v1/zap/${editId}`) : Promise.resolve(null),
     ])
-      .then(([triggerResponse, actionResponse, workflowResponse]) => {
+      .then(([triggerResponse, actionResponse, walletResponse, workflowResponse]) => {
         if (!active) return;
         setTriggers(triggerResponse.data.availableTriggers);
         setAvailableActions(actionResponse.data.availableActions);
+        setSolanaWallet(walletResponse.data.wallet);
         const workflow = workflowResponse?.data.zap as Zap | undefined;
         if (workflow) {
           setName(workflow.name);
@@ -173,6 +180,12 @@ function CreateZapContent() {
   }
 
   async function save(mode: "draft" | "publish") {
+    if (mode === "publish" && actions.some((action) => action.app?.id === "solana") && !solanaWallet) {
+      setError("Create your Solana wallet before publishing this workflow.");
+      const solanaIndex = actions.findIndex((action) => action.app?.id === "solana");
+      setSelection({ kind: "action", index: solanaIndex });
+      return;
+    }
     if (validationErrors.length) {
       setError(validationErrors.join(" "));
       if (!trigger) setSelection({ kind: "trigger" });
@@ -212,6 +225,18 @@ function CreateZapContent() {
 
   const selectedAction =
     selection?.kind === "action" ? actions[selection.index] : undefined;
+
+  async function createSolanaWallet() {
+    setWalletBusy(true);
+    try {
+      const response = await api.post("/api/v1/user/solana-wallet");
+      setSolanaWallet(response.data.wallet);
+    } catch (caught) {
+      setError(getErrorMessage(caught));
+    } finally {
+      setWalletBusy(false);
+    }
+  }
 
   return (
     <main className="min-h-screen bg-[#f7f5f2]">
@@ -411,6 +436,9 @@ function CreateZapContent() {
             {!loading && selection.kind === "action" && selectedAction?.app && (
               <ActionConfiguration
                 action={selectedAction}
+                solanaWallet={solanaWallet}
+                walletBusy={walletBusy}
+                onCreateWallet={createSolanaWallet}
                 onChange={(metadata) =>
                   updateAction(selection.index, { metadata })
                 }
@@ -587,10 +615,16 @@ function ActionConfiguration({
   action,
   onChange,
   onChangeApp,
+  solanaWallet,
+  walletBusy,
+  onCreateWallet,
 }: {
   action: DraftAction;
   onChange: (metadata: Record<string, string>) => void;
   onChangeApp: () => void;
+  solanaWallet: { publicKey: string; network: string } | null;
+  walletBusy: boolean;
+  onCreateWallet: () => void;
 }) {
   const metadata = action.metadata;
   return (
@@ -632,6 +666,24 @@ function ActionConfiguration({
         )}
         {action.app?.id === "solana" && (
           <div className="mt-5 space-y-4">
+            <div className="rounded-xl border border-[#ddd3f5] bg-[#f8f4ff] p-4">
+              <div className="text-[10px] font-black uppercase tracking-[0.12em] text-[#7c3aed]">
+                Solana devnet wallet
+              </div>
+              {solanaWallet ? (
+                <>
+                  <div className="mt-2 break-all font-mono text-xs text-[#4c3b71]">{solanaWallet.publicKey}</div>
+                  <p className="mt-2 text-xs leading-5 text-[#6d6660]">This wallet sends the SOL when the webhook runs.</p>
+                </>
+              ) : (
+                <>
+                  <p className="mt-1 text-xs leading-5 text-[#6d6660]">Create your FlowForge devnet wallet before publishing this transfer automation.</p>
+                  <button type="button" onClick={onCreateWallet} disabled={walletBusy} className="mt-3 rounded-lg bg-[#503eb6] px-3 py-2 text-xs font-bold text-white disabled:opacity-50">
+                    {walletBusy ? "Creating…" : "Create Solana wallet"}
+                  </button>
+                </>
+              )}
+            </div>
             <Field
               label="Wallet address"
               value={metadata.address || ""}
@@ -699,7 +751,7 @@ function TextArea({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full resize-none rounded-lg border border-[#cfc8c1] px-3 py-2.5 text-sm outline-none focus:border-[#503eb6] focus:ring-2 focus:ring-[#ebe8ff]"
+        className="max-h-52 w-full resize-none overflow-y-auto rounded-lg border border-[#cfc8c1] px-3 py-2.5 text-sm outline-none focus:border-[#503eb6] focus:ring-2 focus:ring-[#ebe8ff]"
       />
     </label>
   );

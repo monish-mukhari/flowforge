@@ -15,6 +15,7 @@ export default function ZapDetails() {
   const [error, setError] = useState("");
   const [copied, setCopied] = useState("");
   const [busyAction, setBusyAction] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [editing, setEditing] = useState(false);
   const [draftName, setDraftName] = useState("");
   const [draftDescription, setDraftDescription] = useState("");
@@ -95,6 +96,19 @@ export default function ZapDetails() {
     try {
       const response = await api.post(`/api/v1/zap/${zapId}/duplicate`);
       router.push(`/zap/${response.data.zapId}`);
+    } catch (caught) {
+      setError(getErrorMessage(caught));
+      setBusyAction("");
+    }
+  }
+
+  async function deleteWorkflow() {
+    if (!zap) return;
+    setBusyAction("delete");
+    setError("");
+    try {
+      await api.delete(`/api/v1/zap/${zap.id}`);
+      router.replace("/dashboard");
     } catch (caught) {
       setError(getErrorMessage(caught));
       setBusyAction("");
@@ -285,6 +299,13 @@ export default function ZapDetails() {
                     Archive
                   </button>
                 )}
+                <button
+                  onClick={() => setConfirmDelete(true)}
+                  disabled={!!busyAction}
+                  className="rounded-xl border border-red-200 bg-white px-4 py-2.5 text-sm font-bold text-red-700 hover:bg-red-50 disabled:opacity-50"
+                >
+                  {busyAction === "delete" ? "Deleting…" : "Delete"}
+                </button>
               </div>
             </div>
             <section className="mt-8 rounded-2xl border border-[#e3ded8] bg-white p-5 sm:p-7">
@@ -318,8 +339,8 @@ export default function ZapDetails() {
                 </button>
               </div>
             </section>
-            <div className="mt-8 grid gap-7 lg:grid-cols-[0.9fr_1.1fr]">
-              <section>
+            <div className="mt-8 grid min-w-0 gap-7 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+              <section className="min-w-0">
                 <h2 className="text-xl font-black">Workflow steps</h2>
                 <div className="mt-4">
                   <ReadOnlyStep
@@ -369,7 +390,7 @@ export default function ZapDetails() {
                     ))}
                 </div>
               </section>
-              <section>
+              <section className="min-w-0">
                 <h2 className="text-xl font-black">Test the workflow</h2>
                 <div className="mt-4 rounded-2xl bg-[#2d2525] p-5 text-white">
                   <div className="flex items-center justify-between">
@@ -410,7 +431,7 @@ export default function ZapDetails() {
                       </pre>
                     </div>
                   )}
-                  <pre className="mt-5 whitespace-pre-wrap break-all font-mono text-xs leading-6 text-white/80">
+                  <pre className="mt-5 max-h-44 overflow-auto whitespace-pre-wrap break-all rounded-lg bg-white/5 p-3 font-mono text-xs leading-6 text-white/80">
                     {curl}
                   </pre>
                 </div>
@@ -587,6 +608,20 @@ export default function ZapDetails() {
           </>
         )}
       </main>
+      {confirmDelete && zap && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#2d2525]/35 p-4" role="dialog" aria-modal="true" aria-labelledby="delete-workflow-title">
+          <div className="w-full max-w-md rounded-2xl border border-[#e3ded8] bg-white p-6 shadow-2xl">
+            <h2 id="delete-workflow-title" className="text-xl font-black">Delete workflow?</h2>
+            <p className="mt-2 text-sm leading-6 text-[#6d6660]">
+              This permanently deletes <strong className="text-[#2d2525]">{zap.name}</strong> and its run history. This cannot be undone.
+            </p>
+            <div className="mt-6 flex justify-end gap-3">
+              <button type="button" onClick={() => setConfirmDelete(false)} disabled={!!busyAction} className="rounded-lg border border-[#d8d1ca] px-4 py-2.5 text-sm font-bold hover:bg-[#f7f5f2] disabled:opacity-50">Cancel</button>
+              <button type="button" onClick={deleteWorkflow} disabled={!!busyAction} className="rounded-lg bg-red-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-red-700 disabled:opacity-50">{busyAction === "delete" ? "Deleting…" : "Delete workflow"}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </DashboardShell>
   );
 }
@@ -609,6 +644,11 @@ function RunStatus({ status }: { status: WorkflowRun["status"] }) {
 }
 
 function JsonPanel({ label, value }: { label: string; value: unknown }) {
+  const signature =
+    value && typeof value === "object" && !Array.isArray(value) &&
+    typeof (value as { signature?: unknown }).signature === "string"
+      ? (value as { signature: string }).signature
+      : null;
   return (
     <div>
       <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-[#8d8580]">
@@ -617,6 +657,11 @@ function JsonPanel({ label, value }: { label: string; value: unknown }) {
       <pre className="max-h-44 overflow-auto rounded-lg bg-[#2d2525] p-3 font-mono text-[11px] text-white/80">
         {value == null ? "—" : JSON.stringify(value, null, 2)}
       </pre>
+      {signature && (
+        <a href={`https://explorer.solana.com/tx/${encodeURIComponent(signature)}?cluster=devnet`} target="_blank" rel="noreferrer" className="mt-2 inline-block text-xs font-bold text-[#503eb6] hover:underline">
+          View transfer on Solana Explorer ↗
+        </a>
+      )}
     </div>
   );
 }
@@ -635,7 +680,7 @@ function ReadOnlyStep({
   detail?: string;
 }) {
   return (
-    <div className="flex items-center gap-4 rounded-2xl border border-[#d8d1ca] bg-white p-4">
+    <div className="flex min-w-0 items-center gap-4 rounded-2xl border border-[#d8d1ca] bg-white p-4">
       <AppIcon app={app} />
       <div className="min-w-0">
         <div className="text-[10px] font-bold uppercase tracking-wider text-[#8d8580]">
@@ -643,7 +688,7 @@ function ReadOnlyStep({
         </div>
         <div className="font-bold">{title}</div>
         {detail && (
-          <div className="mt-0.5 truncate text-xs text-[#7d756f]">{detail}</div>
+          <div className="mt-0.5 line-clamp-2 break-words text-xs text-[#7d756f]">{detail}</div>
         )}
       </div>
       <span className="ml-auto text-[#168047]">✓</span>

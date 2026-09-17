@@ -18,6 +18,7 @@ const schema = z.object({
   SMTP_USERNAME: z.string().optional(),
   SMTP_PASSWORD: z.string().optional(),
   EMAIL_FROM: z.string().email().default("no-reply@flowforge.local"),
+  SOLANA_WALLET_ENCRYPTION_KEY: z.string().min(16).default("local-devnet-wallet-encryption-key-change-me"),
   LOG_LEVEL: z
     .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
     .default("info"),

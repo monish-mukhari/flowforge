@@ -236,6 +236,11 @@ function RunStatus({ status }: { status: WorkflowRun["status"] }) {
 }
 
 function JsonPanel({ label, value }: { label: string; value: unknown }) {
+  const signature =
+    value && typeof value === "object" && !Array.isArray(value) &&
+    typeof (value as { signature?: unknown }).signature === "string"
+      ? (value as { signature: string }).signature
+      : null;
   return (
     <div>
       <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-[#8d8580]">
@@ -244,6 +249,11 @@ function JsonPanel({ label, value }: { label: string; value: unknown }) {
       <pre className="max-h-44 overflow-auto rounded-lg bg-[#2d2525] p-3 font-mono text-[11px] text-white/80">
         {value == null ? "—" : JSON.stringify(value, null, 2)}
       </pre>
+      {signature && (
+        <a href={`https://explorer.solana.com/tx/${encodeURIComponent(signature)}?cluster=devnet`} target="_blank" rel="noreferrer" className="mt-2 inline-block text-xs font-bold text-[#503eb6] hover:underline">
+          View transfer on Solana Explorer ↗
+        </a>
+      )}
     </div>
   );
 }

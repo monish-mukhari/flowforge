@@ -89,6 +89,8 @@ services:
       SMTP_ENDPOINT: mailpit
       SMTP_PORT: 1025
       EMAIL_FROM: ${EMAIL_FROM:-no-reply@flowforge.local}
+      SOLANA_RPC_URL: ${SOLANA_RPC_URL:-https://api.devnet.solana.com}
+      SOLANA_WALLET_ENCRYPTION_KEY: ${SOLANA_WALLET_ENCRYPTION_KEY:-local-devnet-wallet-encryption-key-change-me}
       LOG_LEVEL: ${LOG_LEVEL:-info}
     ports:
       - "3002:3002"
@@ -155,8 +157,8 @@ services:
       KAFKA_BROKERS: kafka:9092
       SMTP_ENDPOINT: mailpit
       SMTP_PORT: 1025
-      SOL_PRIVATE_KEY: ${SOL_PRIVATE_KEY:-}
-      SOLANA_RPC_URL: ${SOLANA_RPC_URL:-https://api.mainnet-beta.solana.com}
+      SOLANA_RPC_URL: ${SOLANA_RPC_URL:-https://api.devnet.solana.com}
+      SOLANA_WALLET_ENCRYPTION_KEY: ${SOLANA_WALLET_ENCRYPTION_KEY:-local-devnet-wallet-encryption-key-change-me}
       EMAIL_FROM: ${EMAIL_FROM:-no-reply@flowforge.local}
       WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-4}
       WORKER_LEASE_MS: ${WORKER_LEASE_MS:-30000}

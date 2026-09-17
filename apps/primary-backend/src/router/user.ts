@@ -21,6 +21,8 @@ import {
 import { asyncRoute, HttpError } from "../errors";
 import { sendPasswordResetEmail, sendVerificationEmail } from "../mail";
 import { config } from "../config";
+import { Connection, PublicKey } from "@solana/web3.js";
+import { createEncryptedWallet } from "../solana-wallet";
 
 const router = Router();
 
@@ -39,10 +41,10 @@ router.post(
         "An account with this email already exists",
       );
     const token = newOpaqueToken();
-    const tokenData = {
+  const tokenData = {
       tokenHash: hashOpaqueToken(token),
       expiresAt: new Date(Date.now() + 24 * 60 * 60_000),
-    };
+  };
     const user = existing
       ? await prisma.user.update({
           where: { id: existing.id },
@@ -239,6 +241,45 @@ router.get(
       select: { name: true, email: true, emailVerifiedAt: true },
     });
     return res.json({ user });
+  }),
+);
+
+router.get(
+  "/solana-wallet",
+  authMiddleware,
+  asyncRoute(async (req, res) => {
+    const wallet = await prisma.solanaWallet.findUnique({
+      where: { userId: req.userId! },
+      select: { publicKey: true, network: true },
+    });
+    if (!wallet) return res.json({ wallet: null });
+    let balanceSol = 0;
+    try {
+      const connection = new Connection(
+        process.env.SOLANA_RPC_URL ?? "https://api.devnet.solana.com",
+        "confirmed",
+      );
+      balanceSol =
+        (await connection.getBalance(new PublicKey(wallet.publicKey))) / 1_000_000_000;
+    } catch {
+      // Wallet identity remains available if the RPC is temporarily unavailable.
+    }
+    return res.json({ wallet: { ...wallet, balanceSol } });
+  }),
+);
+
+router.post(
+  "/solana-wallet",
+  authMiddleware,
+  asyncRoute(async (req, res) => {
+    const generated = createEncryptedWallet();
+    const wallet = await prisma.solanaWallet.upsert({
+      where: { userId: req.userId! },
+      create: { userId: req.userId!, ...generated, network: "devnet" },
+      update: {},
+      select: { publicKey: true, network: true },
+    });
+    return res.status(200).json({ wallet });
   }),
 );
 

@@ -33,7 +33,7 @@ The default configuration works for webhook and email workflows. Mailpit capture
 
 Local Compose explicitly runs the APIs in development mode and supplies an isolated local signing secret. For any non-local deployment, set `APP_ENV=production`, a random `JWT_PASSWORD` of at least 32 characters, the exact comma-separated `CORS_ORIGINS`, `APP_PUBLIC_URL`, database credentials, and SMTP settings. Production startup fails closed when the signing secret is absent.
 
-To use the Solana action, copy `.env.example` to `.env` and set `SOL_PRIVATE_KEY`. The implementation defaults to Solana mainnet; use `SOLANA_RPC_URL` to point it at a different RPC endpoint.
+To use the Solana action on devnet, copy `.env.example` to `.env`. Each account receives its own FlowForge devnet wallet; fund the displayed public address from a Solana devnet faucet. Wallet keys are encrypted at rest using `SOLANA_WALLET_ENCRYPTION_KEY` and are never sent to the browser. The default RPC is `https://api.devnet.solana.com`.
 
 Browser API calls use the web app's own origin and are proxied at runtime to keep authentication cookies first-party. Set `BACKEND_INTERNAL_URL` to the backend address reachable by the running web server. Docker Compose sets it to `http://primary-backend:3002`; host-side development defaults to `http://localhost:3002`. Override `NEXT_PUBLIC_HOOKS_URL` before building when deploying remotely.
 

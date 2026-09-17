@@ -103,7 +103,14 @@ async function claimStep(zapRunId: string, stage: number) {
   const step = await prisma.zapRunStep.findUnique({
     where: { zapRunId_sortingOrder: { zapRunId, sortingOrder: stage } },
     include: {
-      zapRun: { select: { metadata: true, status: true, startedAt: true } },
+      zapRun: {
+        select: {
+          metadata: true,
+          status: true,
+          startedAt: true,
+          zap: { select: { userId: true } },
+        },
+      },
     },
   });
   if (!step) return null;
@@ -141,11 +148,19 @@ async function executeStep(
     return { messageId: result.messageId, accepted: result.accepted.length };
   }
   if (step.actionType === "solana") {
-    const signature = await sendSol(
+    const wallet = await prisma.solanaWallet.findUnique({
+      where: { userId: step.zapRun.zap.userId },
+      select: { encryptedSecretKey: true, network: true },
+    });
+    if (!wallet) throw new Error("Solana wallet is not configured for this account");
+    if (wallet.network !== "devnet")
+      throw new Error(`Unsupported Solana wallet network: ${wallet.network}`);
+    const transfer = await sendSol(
       parse(String(actionMetadata.address ?? ""), runMetadata),
       parse(String(actionMetadata.amount ?? ""), runMetadata),
+      wallet.encryptedSecretKey,
     );
-    return { signature };
+    return transfer;
   }
   throw new Error(`Unsupported action type: ${step.actionType}`);
 }
