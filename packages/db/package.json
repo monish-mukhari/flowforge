@@ -20,7 +20,8 @@
     "@prisma/client": "6.19.3"
   },
   "exports": {
-    "./client": "./src/index.ts"
+    "./client": "./src/index.ts",
+    "./connection-crypto": "./src/connection-crypto.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.1",

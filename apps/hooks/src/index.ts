@@ -54,6 +54,7 @@ const executionSnapshotSchema = z.object({
     .array(
       z.object({
         availableActionId: z.string().min(1),
+        connectorVersion: z.number().int().min(1).default(1),
         actionMetadata: z.record(z.string(), z.unknown()),
         sortingOrder: z.number().int().min(0),
       }),
@@ -214,6 +215,7 @@ const webhookHandler: RequestHandler = (req, res, next) => {
               create: snapshot.actions.map((action) => ({
                 sortingOrder: action.sortingOrder,
                 actionType: action.availableActionId,
+                connectorVersion: action.connectorVersion,
                 input: action.actionMetadata as Prisma.InputJsonValue,
                 idempotencyKey: `${runId}:${action.sortingOrder}`,
               })),

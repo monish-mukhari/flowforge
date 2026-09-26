@@ -12,6 +12,7 @@ export const openApiDocument = {
     { name: "Workflows" },
     { name: "Runs" },
     { name: "Connectors" },
+    { name: "Connections" },
   ],
   components: {
     securitySchemes: {
@@ -159,6 +160,28 @@ export const openApiDocument = {
         security: [{ cookieAuth: [] }],
       },
     },
+    "/zap/runs/metrics": {
+      get: {
+        tags: ["Runs"],
+        summary:
+          "Get filtered execution success, latency, retry, and failure metrics",
+        security: [{ cookieAuth: [] }],
+      },
+    },
+    "/zap/notifications": {
+      get: {
+        tags: ["Runs"],
+        summary: "List persistent workflow failure notifications",
+        security: [{ cookieAuth: [] }],
+      },
+    },
+    "/zap/notifications/read-all": {
+      post: {
+        tags: ["Runs"],
+        summary: "Mark all workflow failure notifications as read",
+        security: [{ cookieAuth: [] }],
+      },
+    },
     "/zap/{zapId}/runs": {
       get: {
         tags: ["Runs"],
@@ -193,6 +216,59 @@ export const openApiDocument = {
         tags: ["Connectors"],
         summary: "List action connectors",
         security: [{ cookieAuth: [] }],
+      },
+    },
+    "/action/registry": {
+      get: {
+        tags: ["Connectors"],
+        summary: "List versioned connector contracts and builder fields",
+        security: [{ cookieAuth: [] }],
+      },
+    },
+    "/connections": {
+      get: {
+        tags: ["Connections"],
+        summary: "List the signed-in user's reusable connections without secrets",
+        security: [{ cookieAuth: [] }],
+      },
+      post: {
+        tags: ["Connections"],
+        summary: "Create an encrypted manual connection",
+        security: [{ cookieAuth: [] }],
+      },
+    },
+    "/connections/catalog": {
+      get: {
+        tags: ["Connections"],
+        summary: "List connector connection and OAuth capabilities",
+        security: [{ cookieAuth: [] }],
+      },
+    },
+    "/connections/{connectionId}/test": {
+      post: {
+        tags: ["Connections"],
+        summary: "Test and update a reusable connection",
+        security: [{ cookieAuth: [] }],
+      },
+    },
+    "/connections/{connectionId}": {
+      delete: {
+        tags: ["Connections"],
+        summary: "Remove a reusable connection",
+        security: [{ cookieAuth: [] }],
+      },
+    },
+    "/connections/oauth/{provider}/start": {
+      post: {
+        tags: ["Connections"],
+        summary: "Create a provider OAuth authorization URL",
+        security: [{ cookieAuth: [] }],
+      },
+    },
+    "/connections/oauth/{provider}/callback": {
+      get: {
+        tags: ["Connections"],
+        summary: "Complete a Slack or Google OAuth callback",
       },
     },
   },

@@ -91,6 +91,11 @@ services:
       EMAIL_FROM: ${EMAIL_FROM:-no-reply@flowforge.local}
       SOLANA_RPC_URL: ${SOLANA_RPC_URL:-https://api.devnet.solana.com}
       SOLANA_WALLET_ENCRYPTION_KEY: ${SOLANA_WALLET_ENCRYPTION_KEY:-local-devnet-wallet-encryption-key-change-me}
+      CONNECTION_ENCRYPTION_KEY: ${CONNECTION_ENCRYPTION_KEY:-local-connection-encryption-key-change-me}
+      SLACK_CLIENT_ID: ${SLACK_CLIENT_ID:-}
+      SLACK_CLIENT_SECRET: ${SLACK_CLIENT_SECRET:-}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
     ports:
       - "3002:3002"
@@ -159,6 +164,11 @@ services:
       SMTP_PORT: 1025
       SOLANA_RPC_URL: ${SOLANA_RPC_URL:-https://api.devnet.solana.com}
       SOLANA_WALLET_ENCRYPTION_KEY: ${SOLANA_WALLET_ENCRYPTION_KEY:-local-devnet-wallet-encryption-key-change-me}
+      CONNECTION_ENCRYPTION_KEY: ${CONNECTION_ENCRYPTION_KEY:-local-connection-encryption-key-change-me}
+      SLACK_CLIENT_ID: ${SLACK_CLIENT_ID:-}
+      SLACK_CLIENT_SECRET: ${SLACK_CLIENT_SECRET:-}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       EMAIL_FROM: ${EMAIL_FROM:-no-reply@flowforge.local}
       WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-4}
       WORKER_LEASE_MS: ${WORKER_LEASE_MS:-30000}

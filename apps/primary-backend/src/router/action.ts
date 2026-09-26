@@ -1,7 +1,10 @@
 import { Router } from "express";
 import { authMiddleware } from "../middleware";
-import prisma from "@repo/db/client";
 import { asyncRoute } from "../errors";
+import {
+  connectorRegistry,
+  publicConnectorContract,
+} from "../connectors/registry";
 
 const router = Router();
 
@@ -9,10 +12,20 @@ router.get(
   "/available",
   authMiddleware,
   asyncRoute(async (_req, res) => {
-    const availableActions = await prisma.availableAction.findMany();
+    const availableActions = connectorRegistry.map(publicConnectorContract);
 
     return res.json({
       availableActions,
+    });
+  }),
+);
+
+router.get(
+  "/registry",
+  authMiddleware,
+  asyncRoute(async (_req, res) => {
+    return res.json({
+      connectors: connectorRegistry.map(publicConnectorContract),
     });
   }),
 );

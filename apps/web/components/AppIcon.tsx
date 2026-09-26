@@ -2,60 +2,20 @@ import type { AppOption } from "../lib/types";
 
 const colors: Record<string, string> = {
   webhook: "bg-gradient-to-br from-[#7c3aed] via-[#c026d3] to-[#ec4899]",
-  email: "bg-[#e84d3c]",
+  email: "bg-white ring-1 ring-[#ea4335]/25",
   solana: "bg-[#111111]",
+  http: "bg-[#2563eb]",
+  slack: "bg-[#4a154b]",
+  "google-sheets": "bg-white ring-1 ring-[#34a853]/25",
 };
 
-function WebhookIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      className="h-[62%] w-[62%]"
-      fill="none"
-      aria-hidden="true"
-    >
-      <circle cx="12" cy="4.5" r="2.15" fill="currentColor" />
-      <circle cx="5.5" cy="17" r="2.15" fill="currentColor" />
-      <circle cx="18.5" cy="17" r="2.15" fill="currentColor" />
-      <path
-        d="M12 6.7v3.1m-1.8 3.1-2.8 2.2m6.4-2.2 2.8 2.2"
-        stroke="currentColor"
-        strokeWidth="2.15"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <circle cx="12" cy="12" r="2.35" fill="none" stroke="currentColor" strokeWidth="2.15" />
-    </svg>
-  );
-}
-
-function EmailIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      className="h-[58%] w-[58%]"
-      fill="none"
-      aria-hidden="true"
-    >
-      <rect
-        x="3.5"
-        y="5.5"
-        width="17"
-        height="13"
-        rx="2"
-        stroke="currentColor"
-        strokeWidth="2"
-      />
-      <path
-        d="m5 7 7 5.25L19 7"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
+const assets: Record<string, string> = {
+  email: "/connectors/gmail.svg",
+  "google-sheets": "/connectors/googlesheets.svg",
+  slack: "/connectors/slack.svg",
+  webhook: "/connectors/webhook.svg",
+  http: "/connectors/http.svg",
+};
 
 function SolanaIcon() {
   return (
@@ -92,16 +52,17 @@ export function AppIcon({
       : size === "lg"
         ? "h-14 w-14 text-xl"
         : "h-10 w-10 text-sm";
-  const icon =
-    app?.id === "webhook" ? (
-      <WebhookIcon />
-    ) : app?.id === "email" ? (
-      <EmailIcon />
-    ) : app?.id === "solana" ? (
-      <SolanaIcon />
-    ) : (
-      (app?.name?.charAt(0).toUpperCase() ?? "+")
-    );
+  const icon = assets[app?.id || ""] ? (
+    <img
+      src={assets[app?.id || ""]}
+      alt=""
+      className="h-[68%] w-[68%] object-contain"
+    />
+  ) : app?.id === "solana" ? (
+    <SolanaIcon />
+  ) : (
+    (app?.name?.charAt(0).toUpperCase() ?? "+")
+  );
   return (
     <span
       className={`inline-flex shrink-0 items-center justify-center rounded-xl font-bold text-white ${dimension} ${colors[app?.id || ""] || "bg-[#8d8580]"}`}

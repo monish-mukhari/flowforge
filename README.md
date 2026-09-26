@@ -37,6 +37,12 @@ To use the Solana action on devnet, copy `.env.example` to `.env`. Each account 
 
 Browser API calls use the web app's own origin and are proxied at runtime to keep authentication cookies first-party. Set `BACKEND_INTERNAL_URL` to the backend address reachable by the running web server. Docker Compose sets it to `http://primary-backend:3002`; host-side development defaults to `http://localhost:3002`. Override `NEXT_PUBLIC_HOOKS_URL` before building when deploying remotely.
 
+## Connector platform
+
+Open **Connections** in the dashboard to create reusable encrypted SMTP and HTTP connections or start Slack and Google OAuth. Connection secrets are AES-256-GCM encrypted at rest and are never included in API responses. Configure `CONNECTION_ENCRYPTION_KEY` with at least 32 random characters outside local development. Slack OAuth uses the v2 authorization flow; Google Sheets uses offline OAuth with PKCE. Configure the optional provider client IDs and secrets in `.env` and register callback URLs under `/api/v1/connections/oauth/{provider}/callback`.
+
+The workflow builder exposes versioned Email, Solana, HTTP Request, Slack, and Google Sheets contracts. HTTP actions only permit HTTPS public endpoints, Email can use a reusable SMTP connection, Slack posts through `chat.postMessage`, and Google Sheets appends a row through the Sheets Values API.
+
 ## Accounts and sessions
 
 Passwords are stored with Argon2id. Accounts must be verified using the message captured by Mailpit before login. Access sessions last 15 minutes and are held in an HttpOnly cookie; a rotating refresh cookie keeps the session active for seven days. Signing out and password resets revoke server-side sessions.
@@ -51,7 +57,7 @@ To test password recovery locally, request a reset from `/forgot-password`, open
 | `primary-backend` | Users, JWT auth, app catalog, and workflow CRUD API                     |
 | `hooks`           | Receives webhook payloads and atomically creates `ZapRun` + outbox rows |
 | `sweeper`         | Publishes pending outbox rows to the Kafka `zap-events` topic           |
-| `worker`          | Resolves webhook templates and executes actions in sorting order        |
+| `worker`          | Resolves webhook templates and executes versioned connector actions in sorting order |
 | `postgres`        | Workflow configuration, run payloads, and transactional outbox          |
 | `kafka`           | Asynchronous workflow-stage delivery                                    |
 | `mailpit`         | Local SMTP server and browser inbox                                     |
@@ -74,6 +80,13 @@ an Email recipient can be `{customer.email}`, and a message can contain `Hi {cus
 Each workflow receives an unguessable webhook token. The dashboard displays the complete URL; the former user-ID URL is no longer accepted. Clients may include an `Idempotency-Key` header (maximum 200 visible ASCII characters). Repeating a key for the same workflow returns success without creating another run. JSON webhook and API bodies are limited to 256 KiB by default.
 
 ## Quality and operations
+
+The Connections page and Runs page are the operational dashboards. Connections provides versioned connector contracts, encrypted credential management, OAuth start/callback, connection tests, and removal. Runs provides status, workflow-name,
+run-ID, date, and ordering filters; success and latency metrics; persistent
+dead-letter notifications; immutable-snapshot replay; and per-step attempt
+details. Run payloads, inputs, and outputs are sanitized by the API before they
+reach the browser, with credentials, passwords, secrets, tokens, cookies, and
+authorization values replaced by `[REDACTED]`.
 
 ```bash
 npm test

@@ -8,7 +8,7 @@ import pino from "pino";
 import { z } from "zod";
 import { parse } from "./parser";
 import { sendSol } from "./solana";
-import { sendEmail } from "./email";
+import { executeConnectorAction } from "./connector-executors";
 import {
   executionErrorMessage,
   retryDelayMs,
@@ -108,7 +108,7 @@ async function claimStep(zapRunId: string, stage: number) {
           metadata: true,
           status: true,
           startedAt: true,
-          zap: { select: { userId: true } },
+          zap: { select: { id: true, userId: true, name: true } },
         },
       },
     },
@@ -139,20 +139,22 @@ async function executeStep(
 ) {
   const actionMetadata = metadataSchema.parse(step.input);
   const runMetadata = metadataSchema.parse(step.zapRun.metadata);
-  if (step.actionType === "email") {
-    const result = await sendEmail(
-      parse(String(actionMetadata.email ?? ""), runMetadata),
-      parse(String(actionMetadata.body ?? ""), runMetadata),
-      step.idempotencyKey,
-    );
-    return { messageId: result.messageId, accepted: result.accepted.length };
-  }
+  const connectorResult = await executeConnectorAction({
+    actionType: step.actionType,
+    connectorVersion: step.connectorVersion,
+    actionMetadata,
+    runMetadata,
+    userId: step.zapRun.zap.userId,
+    idempotencyKey: step.idempotencyKey,
+  });
+  if (connectorResult) return connectorResult;
   if (step.actionType === "solana") {
     const wallet = await prisma.solanaWallet.findUnique({
       where: { userId: step.zapRun.zap.userId },
       select: { encryptedSecretKey: true, network: true },
     });
-    if (!wallet) throw new Error("Solana wallet is not configured for this account");
+    if (!wallet)
+      throw new Error("Solana wallet is not configured for this account");
     if (wallet.network !== "devnet")
       throw new Error(`Unsupported Solana wallet network: ${wallet.network}`);
     const transfer = await sendSol(
@@ -265,6 +267,23 @@ async function failStep(
         ...(!retry ? { completedAt: now } : {}),
       },
     });
+    if (!retry) {
+      await tx.runNotification.upsert({
+        where: { zapRunId: step.zapRunId },
+        create: {
+          userId: step.zapRun.zap.userId,
+          zapId: step.zapRun.zap.id,
+          zapRunId: step.zapRunId,
+          title: `Workflow failed: ${step.zapRun.zap.name}`,
+          message: `Run ${step.zapRunId.slice(0, 8)} moved to dead letter after ${step.attemptCount} attempts.`,
+        },
+        update: {
+          title: `Workflow failed: ${step.zapRun.zap.name}`,
+          message: `Run ${step.zapRunId.slice(0, 8)} moved to dead letter after ${step.attemptCount} attempts.`,
+          readAt: null,
+        },
+      });
+    }
     if (retry) {
       await tx.zapRunOutbox.upsert({
         where: { zapRunId: step.zapRunId },

@@ -2,6 +2,34 @@ export type AppOption = {
   id: string;
   name: string;
   image: string;
+  key?: string;
+  version?: number;
+  description?: string;
+  authType?: "NONE" | "OPTIONAL_CONNECTION" | "OAUTH2";
+  oauthProvider?: string;
+  fields?: Array<{
+    key: string;
+    label: string;
+    type: "text" | "textarea" | "select" | "connection";
+    placeholder?: string;
+    required?: boolean;
+    options?: Array<{ label: string; value: string }>;
+  }>;
+};
+
+export type AppConnection = {
+  id: string;
+  connectorKey: string;
+  name: string;
+  status: string;
+  externalAccountId: string | null;
+  externalAccountName: string | null;
+  scopes: string[];
+  expiresAt: string | null;
+  lastTestedAt: string | null;
+  lastError: string | null;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type ZapAction = {
@@ -56,6 +84,7 @@ export type RunStep = {
   id: string;
   sortingOrder: number;
   actionType: string;
+  connectorVersion: number;
   input: Record<string, unknown>;
   output: Record<string, unknown> | null;
   status:
@@ -84,4 +113,26 @@ export type WorkflowRun = {
   workflowVersion: { version: number } | null;
   steps: RunStep[];
   zap?: { id: string; name: string };
+};
+
+export type RunMetrics = {
+  total: number;
+  successful: number;
+  failed: number;
+  active: number;
+  successRate: number | null;
+  averageDurationMs: number | null;
+  p95DurationMs: number | null;
+  retryingSteps: number;
+  unreadNotifications: number;
+};
+
+export type RunNotification = {
+  id: string;
+  title: string;
+  message: string;
+  readAt: string | null;
+  createdAt: string;
+  zap: { id: string; name: string };
+  zapRun: { id: string; status: WorkflowRun["status"]; createdAt: string };
 };

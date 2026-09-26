@@ -18,7 +18,15 @@ const schema = z.object({
   SMTP_USERNAME: z.string().optional(),
   SMTP_PASSWORD: z.string().optional(),
   EMAIL_FROM: z.string().email().default("no-reply@flowforge.local"),
-  SOLANA_WALLET_ENCRYPTION_KEY: z.string().min(16).default("local-devnet-wallet-encryption-key-change-me"),
+  SOLANA_WALLET_ENCRYPTION_KEY: z
+    .string()
+    .min(16)
+    .default("local-devnet-wallet-encryption-key-change-me"),
+  CONNECTION_ENCRYPTION_KEY: z.string().min(32).optional(),
+  SLACK_CLIENT_ID: z.string().optional(),
+  SLACK_CLIENT_SECRET: z.string().optional(),
+  GOOGLE_CLIENT_ID: z.string().optional(),
+  GOOGLE_CLIENT_SECRET: z.string().optional(),
   LOG_LEVEL: z
     .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
     .default("info"),
@@ -35,6 +43,10 @@ if (appEnvironment === "production" && !parsed.data.JWT_PASSWORD)
   throw new Error(
     "JWT_PASSWORD is required in production and must contain at least 32 characters",
   );
+if (appEnvironment === "production" && !parsed.data.CONNECTION_ENCRYPTION_KEY)
+  throw new Error(
+    "CONNECTION_ENCRYPTION_KEY is required in production and must contain at least 32 characters",
+  );
 
 export const config = {
   ...parsed.data,
@@ -44,4 +56,7 @@ export const config = {
     .map((value) => value.trim())
     .filter(Boolean),
   COOKIE_SECURE: appEnvironment === "production",
+  CONNECTION_ENCRYPTION_KEY:
+    parsed.data.CONNECTION_ENCRYPTION_KEY ??
+    "local-connection-encryption-key-change-me",
 };

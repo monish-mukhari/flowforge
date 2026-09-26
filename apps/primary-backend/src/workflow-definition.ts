@@ -1,20 +1,7 @@
 import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 import { HttpError } from "./errors";
-
-const templateOrText = z.string().trim().min(1).max(10_000);
-const emailMetadata = z
-  .object({
-    email: templateOrText,
-    body: templateOrText,
-  })
-  .passthrough();
-const solanaMetadata = z
-  .object({
-    address: templateOrText,
-    amount: templateOrText,
-  })
-  .passthrough();
+import { connectorContract } from "./connectors/registry";
 
 export type WorkflowActionInput = {
   availableActionId: string;
@@ -23,12 +10,7 @@ export type WorkflowActionInput = {
 
 export function validateConnectorConfiguration(actions: WorkflowActionInput[]) {
   const issues = actions.flatMap((action, index) => {
-    const schema =
-      action.availableActionId === "email"
-        ? emailMetadata
-        : action.availableActionId === "solana"
-          ? solanaMetadata
-          : undefined;
+    const schema = connectorContract(action.availableActionId)?.schema;
     if (!schema) return [];
     const parsed = schema.safeParse(action.actionMetadata ?? {});
     return parsed.success
@@ -75,6 +57,7 @@ export function createDefinitionSnapshot(workflow: DefinitionSource) {
     },
     actions: workflow.actions.map((action) => ({
       availableActionId: action.actionId,
+      connectorVersion: connectorContract(action.actionId)?.version ?? 1,
       actionMetadata: action.metadata,
       sortingOrder: action.sortingOrder,
     })),

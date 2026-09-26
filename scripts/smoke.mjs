@@ -82,6 +82,41 @@ const cookies = ["flowforge_access", "flowforge_refresh"]
 if (!cookies.includes("flowforge_access"))
   throw new Error("Login did not issue secure session cookies");
 
+const connectionCatalog = await request(
+  `${apiUrl}/api/v1/connections/catalog`,
+  {
+    headers: { cookie: cookies },
+  },
+);
+for (const connector of ["email", "http", "slack", "google-sheets"]) {
+  if (
+    !connectionCatalog.body.connectors.some(
+      (item) => item.id === connector && item.version === 1,
+    )
+  )
+    throw new Error(`Versioned connector catalog is missing ${connector}`);
+}
+const smtpConnection = await request(`${apiUrl}/api/v1/connections`, {
+  method: "POST",
+  headers: { "content-type": "application/json", cookie: cookies },
+  body: JSON.stringify({
+    connectorKey: "email",
+    name: "Smoke Mailpit",
+    credentials: {
+      host: "mailpit",
+      port: 1025,
+      secure: false,
+      from: "smoke@flowforge.local",
+    },
+  }),
+});
+if ("encryptedCredentials" in smtpConnection.body.connection)
+  throw new Error("Connection API exposed encrypted credential material");
+await request(
+  `${apiUrl}/api/v1/connections/${smtpConnection.body.connection.id}/test`,
+  { method: "POST", headers: { cookie: cookies } },
+);
+
 const created = await request(`${apiUrl}/api/v1/zap`, {
   method: "POST",
   headers: { "content-type": "application/json", cookie: cookies },
@@ -90,7 +125,11 @@ const created = await request(`${apiUrl}/api/v1/zap`, {
     actions: [
       {
         availableActionId: "email",
-        actionMetadata: { email, body: "Smoke run {event.id}" },
+        actionMetadata: {
+          connectionId: smtpConnection.body.connection.id,
+          email,
+          body: "Smoke run {event.id}",
+        },
       },
     ],
   }),
@@ -112,7 +151,11 @@ const acceptedWebhook = await request(webhook, {
     "content-type": "application/json",
     "idempotency-key": idempotencyKey,
   },
-  body: JSON.stringify({ event: { id: "passed" } }),
+  body: JSON.stringify({
+    event: { id: "passed" },
+    password: "must-not-reach-the-browser",
+    nested: { apiKey: "also-sensitive" },
+  }),
 });
 const duplicateWebhook = await request(webhook, {
   method: "POST",
@@ -120,7 +163,11 @@ const duplicateWebhook = await request(webhook, {
     "content-type": "application/json",
     "idempotency-key": idempotencyKey,
   },
-  body: JSON.stringify({ event: { id: "passed" } }),
+  body: JSON.stringify({
+    event: { id: "passed" },
+    password: "must-not-reach-the-browser",
+    nested: { apiKey: "also-sensitive" },
+  }),
 });
 if (!duplicateWebhook.body.duplicate)
   throw new Error("Repeated webhook was not reported as duplicate");
@@ -146,6 +193,11 @@ if (
   throw new Error(
     "Successful run did not persist its step and attempt records",
   );
+if (
+  completedRun.metadata.password !== "[REDACTED]" ||
+  completedRun.metadata.nested?.apiKey !== "[REDACTED]"
+)
+  throw new Error("Run history returned an unredacted sensitive value");
 
 const failing = await request(`${apiUrl}/api/v1/zap`, {
   method: "POST",
@@ -200,6 +252,40 @@ if (
   deadLetterRun.steps[0]?.attempts.length !== 3
 )
   throw new Error("Dead-letter run did not persist all retry attempts");
+const failureNotification = await waitFor(async () => {
+  const response = await request(
+    `${apiUrl}/api/v1/zap/notifications?unreadOnly=true`,
+    { headers: { cookie: cookies } },
+  );
+  return response.body.notifications.find(
+    (notification) => notification.zapRun.id === deadLetterRun.id,
+  );
+}, "persistent dead-letter notification");
+const metrics = (
+  await request(`${apiUrl}/api/v1/zap/runs/metrics`, {
+    headers: { cookie: cookies },
+  })
+).body.metrics;
+if (
+  metrics.successful < 1 ||
+  metrics.failed < 1 ||
+  metrics.unreadNotifications < 1
+)
+  throw new Error("Operational run metrics did not include the smoke runs");
+await request(
+  `${apiUrl}/api/v1/zap/notifications/${failureNotification.id}/read`,
+  { method: "POST", headers: { cookie: cookies } },
+);
+const notificationState = await request(
+  `${apiUrl}/api/v1/zap/notifications?unreadOnly=true`,
+  { headers: { cookie: cookies } },
+);
+if (
+  notificationState.body.notifications.some(
+    (notification) => notification.id === failureNotification.id,
+  )
+)
+  throw new Error("Failure notification was not marked as read");
 const replay = await request(
   `${apiUrl}/api/v1/zap/${failingWorkflow.id}/runs/${deadLetterRun.id}/replay`,
   { method: "POST", headers: { cookie: cookies } },
@@ -218,4 +304,4 @@ await request(`${apiUrl}/api/v1/user/logout`, {
   method: "POST",
   headers: { cookie: cookies },
 });
-console.log(`Phase 2 smoke test passed for ${workflow.id}`);
+console.log(`Phase 4 smoke test passed for ${workflow.id}`);

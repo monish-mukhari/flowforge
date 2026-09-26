@@ -57,17 +57,20 @@ model User {
   emailVerificationTokens EmailVerificationToken[]
   passwordResetTokens     PasswordResetToken[]
   solanaWallet            SolanaWallet?
+  runNotifications        RunNotification[]
+  appConnections          AppConnection[]
+  oauthStates             OAuthState[]
 }
 
 model SolanaWallet {
-  id                    String   @id @default(uuid())
-  userId                Int      @unique @map("user_id")
-  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  publicKey             String   @unique @map("public_key")
-  encryptedSecretKey    String   @map("encrypted_secret_key")
-  network               String   @default("devnet")
-  createdAt             DateTime @default(now()) @map("created_at")
-  updatedAt             DateTime @updatedAt @map("updated_at")
+  id                 String   @id @default(uuid())
+  userId             Int      @unique @map("user_id")
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  publicKey          String   @unique @map("public_key")
+  encryptedSecretKey String   @map("encrypted_secret_key")
+  network            String   @default("devnet")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
 }
 
 model AuthSession {
@@ -122,6 +125,7 @@ model Zap {
   zapRuns          ZapRun[]
   versions         WorkflowVersion[]
   triggerCaptures  TestTriggerCapture[]
+  runNotifications RunNotification[]
   publishedVersion Int?                 @map("published_version")
   publishedAt      DateTime?            @map("published_at")
   pausedAt         DateTime?            @map("paused_at")
@@ -198,6 +202,57 @@ model AvailableAction {
   actions Action[]
 }
 
+model ConnectorDefinition {
+  id           String   @id
+  key          String
+  version      Int
+  name         String
+  description  String
+  image        String
+  authType     String   @map("auth_type")
+  actionSchema Json     @map("action_schema")
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@unique([key, version])
+  @@index([key, active])
+}
+
+model AppConnection {
+  id                   String    @id @default(uuid())
+  userId               Int       @map("user_id")
+  user                 User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  connectorKey         String    @map("connector_key")
+  name                 String
+  encryptedCredentials String    @map("encrypted_credentials")
+  status               String    @default("ACTIVE")
+  externalAccountId    String?   @map("external_account_id")
+  externalAccountName  String?   @map("external_account_name")
+  scopes               Json      @default("[]")
+  expiresAt            DateTime? @map("expires_at")
+  lastTestedAt         DateTime? @map("last_tested_at")
+  lastError            String?   @map("last_error")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+
+  @@index([userId, connectorKey, status])
+}
+
+model OAuthState {
+  id           String   @id @default(uuid())
+  userId       Int      @map("user_id")
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  connectorKey String   @map("connector_key")
+  tokenHash    String   @unique @map("token_hash")
+  codeVerifier String?  @map("code_verifier")
+  expiresAt    DateTime @map("expires_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([userId, connectorKey])
+  @@index([expiresAt])
+}
+
 model ZapRun {
   id                 String           @id @default(uuid())
   zapId              String           @map("zap_id")
@@ -213,6 +268,7 @@ model ZapRun {
   replayOfId         String?          @map("replay_of_id")
   replayOf           ZapRun?          @relation("ZapRunReplays", fields: [replayOfId], references: [id], onDelete: SetNull)
   replays            ZapRun[]         @relation("ZapRunReplays")
+  notification       RunNotification?
   startedAt          DateTime?        @map("started_at")
   completedAt        DateTime?        @map("completed_at")
   lastError          String?          @map("last_error")
@@ -226,27 +282,45 @@ model ZapRun {
   @@index([replayOfId])
 }
 
+model RunNotification {
+  id        String    @id @default(uuid())
+  userId    Int       @map("user_id")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  zapId     String    @map("zap_id")
+  zap       Zap       @relation(fields: [zapId], references: [id], onDelete: Cascade)
+  zapRunId  String    @unique @map("zap_run_id")
+  zapRun    ZapRun    @relation(fields: [zapRunId], references: [id], onDelete: Cascade)
+  title     String
+  message   String
+  readAt    DateTime? @map("read_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@index([userId, readAt, createdAt])
+  @@index([zapId, createdAt])
+}
+
 model ZapRunStep {
-  id             String          @id @default(uuid())
-  zapRunId       String          @map("zap_run_id")
-  zapRun         ZapRun          @relation(fields: [zapRunId], references: [id], onDelete: Cascade)
-  sortingOrder   Int             @map("sorting_order")
-  actionType     String          @map("action_type")
-  input          Json
-  output         Json?
-  status         RunStepStatus   @default(PENDING)
-  attemptCount   Int             @default(0) @map("attempt_count")
-  maxAttempts    Int             @default(3) @map("max_attempts")
-  nextAttemptAt  DateTime        @default(now()) @map("next_attempt_at")
-  leaseOwner     String?         @map("lease_owner")
-  leaseExpiresAt DateTime?       @map("lease_expires_at")
-  idempotencyKey String          @unique @map("idempotency_key")
-  lastError      String?         @map("last_error")
-  startedAt      DateTime?       @map("started_at")
-  completedAt    DateTime?       @map("completed_at")
-  createdAt      DateTime        @default(now()) @map("created_at")
-  updatedAt      DateTime        @updatedAt @map("updated_at")
-  attempts       ZapRunAttempt[]
+  id               String          @id @default(uuid())
+  zapRunId         String          @map("zap_run_id")
+  zapRun           ZapRun          @relation(fields: [zapRunId], references: [id], onDelete: Cascade)
+  sortingOrder     Int             @map("sorting_order")
+  actionType       String          @map("action_type")
+  connectorVersion Int             @default(1) @map("connector_version")
+  input            Json
+  output           Json?
+  status           RunStepStatus   @default(PENDING)
+  attemptCount     Int             @default(0) @map("attempt_count")
+  maxAttempts      Int             @default(3) @map("max_attempts")
+  nextAttemptAt    DateTime        @default(now()) @map("next_attempt_at")
+  leaseOwner       String?         @map("lease_owner")
+  leaseExpiresAt   DateTime?       @map("lease_expires_at")
+  idempotencyKey   String          @unique @map("idempotency_key")
+  lastError        String?         @map("last_error")
+  startedAt        DateTime?       @map("started_at")
+  completedAt      DateTime?       @map("completed_at")
+  createdAt        DateTime        @default(now()) @map("created_at")
+  updatedAt        DateTime        @updatedAt @map("updated_at")
+  attempts         ZapRunAttempt[]
 
   @@unique([zapRunId, sortingOrder])
   @@index([status, nextAttemptAt])

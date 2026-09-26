@@ -13,6 +13,7 @@ import { config } from "./config";
 import { errorHandler, notFoundHandler } from "./errors";
 import { logger } from "./logger";
 import { openApiDocument } from "./openapi";
+import { connectionRouter } from "./router/connection";
 
 export const app = express();
 app.disable("x-powered-by");
@@ -75,6 +76,7 @@ app.use("/api/v1/zap", zapRouter);
 app.use("/api/v1/action", actionRouter);
 
 app.use("/api/v1/trigger", triggerRouter);
+app.use("/api/v1/connections", connectionRouter);
 app.use(notFoundHandler);
 app.use(errorHandler);
 

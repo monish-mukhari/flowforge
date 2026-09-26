@@ -17,6 +17,8 @@ import {
   validateConnectorConfiguration,
   type WorkflowActionInput,
 } from "../workflow-definition";
+import { redactRun } from "../run-redaction";
+import { calculateRunMetrics } from "../run-metrics";
 
 const router = Router();
 const workflowInclude = {
@@ -25,25 +27,81 @@ const workflowInclude = {
   _count: { select: { versions: true } },
 } satisfies Prisma.ZapInclude;
 
-const runListQuerySchema = z.object({
+const runListQuerySchema = z
+  .object({
+    page: z.coerce.number().int().min(1).default(1),
+    pageSize: z.coerce.number().int().min(1).max(50).default(10),
+    status: z
+      .enum(["QUEUED", "RUNNING", "SUCCEEDED", "FAILED", "DEAD_LETTER"])
+      .optional(),
+    workflowId: z.string().uuid().optional(),
+    search: z.string().trim().max(120).optional(),
+    from: z.coerce.date().optional(),
+    to: z.coerce.date().optional(),
+    sort: z.enum(["newest", "oldest"]).default("newest"),
+  })
+  .refine(({ from, to }) => !from || !to || from <= to, {
+    message: "The start date must be before the end date",
+    path: ["from"],
+  });
+const runParamsSchema = ZapIdSchema.extend({ runId: z.string().uuid() });
+const notificationParamsSchema = z.object({
+  notificationId: z.string().uuid(),
+});
+const notificationQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(50).default(10),
-  status: z
-    .enum(["QUEUED", "RUNNING", "SUCCEEDED", "FAILED", "DEAD_LETTER"])
-    .optional(),
+  unreadOnly: z
+    .enum(["true", "false"])
+    .transform((value) => value === "true")
+    .default("false"),
 });
-const runParamsSchema = ZapIdSchema.extend({ runId: z.string().uuid() });
 const replaySnapshotSchema = z.object({
   actions: z.array(
     z.object({
       availableActionId: z.string(),
+      connectorVersion: z.number().int().min(1).default(1),
       actionMetadata: z.record(z.string(), z.unknown()),
       sortingOrder: z.number().int().min(0),
     }),
   ),
 });
 
+type RunListQuery = z.infer<typeof runListQuerySchema>;
+
+function runDateFilter(query: RunListQuery): Prisma.DateTimeFilter | undefined {
+  if (!query.from && !query.to) return undefined;
+  return {
+    ...(query.from ? { gte: query.from } : {}),
+    ...(query.to ? { lte: query.to } : {}),
+  };
+}
+
+function ownedRunWhere(
+  userId: number,
+  query: RunListQuery,
+): Prisma.ZapRunWhereInput {
+  const createdAt = runDateFilter(query);
+  return {
+    zap: {
+      userId,
+      ...(query.workflowId ? { id: query.workflowId } : {}),
+    },
+    ...(query.status ? { status: query.status } : {}),
+    ...(createdAt ? { createdAt } : {}),
+    ...(query.search
+      ? {
+          OR: [
+            { id: { contains: query.search, mode: "insensitive" } },
+            { zap: { name: { contains: query.search, mode: "insensitive" } } },
+          ],
+        }
+      : {}),
+  };
+}
+
 async function ensureAvailableConnectors(
+  userId: number,
   triggerId: string,
   actions: WorkflowActionInput[],
 ) {
@@ -67,6 +125,38 @@ async function ensureAvailableConnectors(
       "Workflow contains an unavailable trigger or action",
     );
   validateConnectorConfiguration(actions);
+  const requestedConnections = actions.flatMap((action) => {
+    const connectionId = action.actionMetadata?.connectionId;
+    return typeof connectionId === "string"
+      ? [{ id: connectionId, connectorKey: action.availableActionId }]
+      : [];
+  });
+  if (requestedConnections.length) {
+    const connections = await prisma.appConnection.findMany({
+      where: {
+        userId,
+        id: { in: requestedConnections.map((connection) => connection.id) },
+        status: { not: "REVOKED" },
+      },
+      select: { id: true, connectorKey: true },
+    });
+    const byId = new Map(
+      connections.map((connection) => [connection.id, connection.connectorKey]),
+    );
+    const invalid = requestedConnections.some(
+      (connection) => byId.get(connection.id) !== connection.connectorKey,
+    );
+    if (
+      invalid ||
+      connections.length !==
+        new Set(requestedConnections.map((item) => item.id)).size
+    )
+      throw new HttpError(
+        400,
+        "INVALID_CONNECTION",
+        "Workflow uses a missing, revoked, or incompatible connection",
+      );
+  }
 }
 
 async function findOwnedWorkflow(userId: number, zapId: string) {
@@ -85,7 +175,11 @@ router.post(
   asyncRoute(async (req, res) => {
     const userId = req.userId!;
     const input = ZapCreateSchema.parse(req.body);
-    await ensureAvailableConnectors(input.availableTriggerId, input.actions);
+    await ensureAvailableConnectors(
+      userId,
+      input.availableTriggerId,
+      input.actions,
+    );
     const workflow = await prisma.$transaction(
       async (tx: Prisma.TransactionClient) => {
         const zap = await tx.zap.create({
@@ -195,7 +289,7 @@ router.patch(
         availableActionId: action.actionId,
         actionMetadata: action.metadata as Record<string, unknown>,
       }));
-    await ensureAvailableConnectors(triggerId, actions);
+    await ensureAvailableConnectors(userId, triggerId, actions);
     const workflow = await prisma.$transaction(
       async (tx: Prisma.TransactionClient) => {
         if (input.availableTriggerId || input.triggerMetadata) {
@@ -256,7 +350,15 @@ router.post(
         "WORKFLOW_ARCHIVED",
         "Archived workflows cannot be published",
       );
-    validateConnectorConfiguration(
+    if (!workflow.trigger)
+      throw new HttpError(
+        400,
+        "WORKFLOW_TRIGGER_REQUIRED",
+        "Workflow must have a trigger before it can be published",
+      );
+    await ensureAvailableConnectors(
+      userId,
+      workflow.trigger.triggerId,
       workflow.actions.map((action) => ({
         availableActionId: action.actionId,
         actionMetadata: action.metadata as Record<string, unknown>,
@@ -454,14 +556,22 @@ router.get(
     const { zapId } = ZapIdSchema.parse(req.params);
     const query = runListQuerySchema.parse(req.query);
     await findOwnedWorkflow(userId, zapId);
-    const where: Prisma.ZapRunWhereInput = {
+    const createdAt = runDateFilter(query);
+    const summaryWhere: Prisma.ZapRunWhereInput = {
       zapId,
+      ...(createdAt ? { createdAt } : {}),
+    };
+    const where: Prisma.ZapRunWhereInput = {
+      ...summaryWhere,
       ...(query.status ? { status: query.status } : {}),
+      ...(query.search
+        ? { id: { contains: query.search, mode: "insensitive" } }
+        : {}),
     };
     const [runs, total, statusCounts] = await Promise.all([
       prisma.zapRun.findMany({
         where,
-        orderBy: { createdAt: "desc" },
+        orderBy: { createdAt: query.sort === "newest" ? "desc" : "asc" },
         skip: (query.page - 1) * query.pageSize,
         take: query.pageSize,
         include: {
@@ -475,12 +585,12 @@ router.get(
       prisma.zapRun.count({ where }),
       prisma.zapRun.groupBy({
         by: ["status"],
-        where: { zapId },
+        where: summaryWhere,
         _count: { _all: true },
       }),
     ]);
     return res.json({
-      runs,
+      runs: runs.map(redactRun),
       summary: Object.fromEntries(
         statusCounts.map((entry) => [entry.status, entry._count._all]),
       ),
@@ -500,14 +610,12 @@ router.get(
   asyncRoute(async (req, res) => {
     const userId = req.userId!;
     const query = runListQuerySchema.parse(req.query);
-    const where: Prisma.ZapRunWhereInput = {
-      zap: { userId },
-      ...(query.status ? { status: query.status } : {}),
-    };
+    const where = ownedRunWhere(userId, query);
+    const summaryWhere = ownedRunWhere(userId, { ...query, status: undefined });
     const [runs, total, statusCounts] = await Promise.all([
       prisma.zapRun.findMany({
         where,
-        orderBy: { createdAt: "desc" },
+        orderBy: { createdAt: query.sort === "newest" ? "desc" : "asc" },
         skip: (query.page - 1) * query.pageSize,
         take: query.pageSize,
         include: {
@@ -522,12 +630,12 @@ router.get(
       prisma.zapRun.count({ where }),
       prisma.zapRun.groupBy({
         by: ["status"],
-        where: { zap: { userId } },
+        where: summaryWhere,
         _count: { _all: true },
       }),
     ]);
     return res.json({
-      runs,
+      runs: runs.map(redactRun),
       summary: Object.fromEntries(
         statusCounts.map((entry) => [entry.status, entry._count._all]),
       ),
@@ -538,6 +646,107 @@ router.get(
         totalPages: Math.ceil(total / query.pageSize),
       },
     });
+  }),
+);
+
+router.get(
+  "/runs/metrics",
+  authMiddleware,
+  asyncRoute(async (req, res) => {
+    const userId = req.userId!;
+    const query = runListQuerySchema.parse(req.query);
+    const where = ownedRunWhere(userId, query);
+    const [runs, retryingSteps, unreadNotifications] = await Promise.all([
+      prisma.zapRun.findMany({
+        where,
+        select: { status: true, startedAt: true, completedAt: true },
+      }),
+      prisma.zapRunStep.count({
+        where: { status: "RETRY_SCHEDULED", zapRun: where },
+      }),
+      prisma.runNotification.count({ where: { userId, readAt: null } }),
+    ]);
+    return res.json({
+      metrics: {
+        ...calculateRunMetrics(runs),
+        retryingSteps,
+        unreadNotifications,
+      },
+    });
+  }),
+);
+
+router.get(
+  "/notifications",
+  authMiddleware,
+  asyncRoute(async (req, res) => {
+    const userId = req.userId!;
+    const query = notificationQuerySchema.parse(req.query);
+    const where: Prisma.RunNotificationWhereInput = {
+      userId,
+      ...(query.unreadOnly ? { readAt: null } : {}),
+    };
+    const [notifications, total, unread] = await Promise.all([
+      prisma.runNotification.findMany({
+        where,
+        include: {
+          zap: { select: { id: true, name: true } },
+          zapRun: { select: { id: true, status: true, createdAt: true } },
+        },
+        orderBy: { createdAt: "desc" },
+        skip: (query.page - 1) * query.pageSize,
+        take: query.pageSize,
+      }),
+      prisma.runNotification.count({ where }),
+      prisma.runNotification.count({ where: { userId, readAt: null } }),
+    ]);
+    return res.json({
+      notifications,
+      unread,
+      pagination: {
+        page: query.page,
+        pageSize: query.pageSize,
+        total,
+        totalPages: Math.ceil(total / query.pageSize),
+      },
+    });
+  }),
+);
+
+router.post(
+  "/notifications/read-all",
+  authMiddleware,
+  asyncRoute(async (req, res) => {
+    const userId = req.userId!;
+    const result = await prisma.runNotification.updateMany({
+      where: { userId, readAt: null },
+      data: { readAt: new Date() },
+    });
+    return res.json({ updated: result.count });
+  }),
+);
+
+router.post(
+  "/notifications/:notificationId/read",
+  authMiddleware,
+  asyncRoute(async (req, res) => {
+    const userId = req.userId!;
+    const { notificationId } = notificationParamsSchema.parse(req.params);
+    const notification = await prisma.runNotification.findFirst({
+      where: { id: notificationId, userId },
+      select: { id: true },
+    });
+    if (!notification)
+      throw new HttpError(
+        404,
+        "NOTIFICATION_NOT_FOUND",
+        "Notification not found",
+      );
+    await prisma.runNotification.update({
+      where: { id: notificationId },
+      data: { readAt: new Date() },
+    });
+    return res.status(204).send();
   }),
 );
 
@@ -560,7 +769,7 @@ router.get(
     });
     if (!run)
       throw new HttpError(404, "RUN_NOT_FOUND", "Workflow run not found");
-    return res.json({ run });
+    return res.json({ run: redactRun(run) });
   }),
 );
 
@@ -594,12 +803,14 @@ router.post(
       ? source.steps.map((step) => ({
           sortingOrder: step.sortingOrder,
           actionType: step.actionType,
+          connectorVersion: step.connectorVersion,
           input: step.input,
           maxAttempts: step.maxAttempts,
         }))
       : snapshot.actions.map((action) => ({
           sortingOrder: action.sortingOrder,
           actionType: action.availableActionId,
+          connectorVersion: action.connectorVersion,
           input: action.actionMetadata as Prisma.InputJsonValue,
           maxAttempts: 3,
         }));
@@ -616,6 +827,7 @@ router.post(
           create: actions.map((action) => ({
             sortingOrder: action.sortingOrder,
             actionType: action.actionType,
+            connectorVersion: action.connectorVersion,
             input: action.input as Prisma.InputJsonValue,
             maxAttempts: action.maxAttempts,
             idempotencyKey: `${replayId}:${action.sortingOrder}`,
@@ -625,7 +837,7 @@ router.post(
       },
       include: { steps: { orderBy: { sortingOrder: "asc" } } },
     });
-    return res.status(202).json({ run: replay });
+    return res.status(202).json({ run: redactRun(replay) });
   }),
 );
 

@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Brand } from "../../../components/Brand";
 import { AppIcon } from "../../../components/AppIcon";
 import { api, getErrorMessage } from "../../../lib/api";
-import type { AppOption, Zap } from "../../../lib/types";
+import type { AppConnection, AppOption, Zap } from "../../../lib/types";
 import { insertItem, reorderItem } from "../../../lib/workflow-order";
 
 type DraftAction = {
@@ -19,6 +19,7 @@ function CreateZapContent() {
   const [name, setName] = useState("Untitled workflow");
   const [triggers, setTriggers] = useState<AppOption[]>([]);
   const [availableActions, setAvailableActions] = useState<AppOption[]>([]);
+  const [connections, setConnections] = useState<AppConnection[]>([]);
   const [trigger, setTrigger] = useState<AppOption>();
   const [actions, setActions] = useState<DraftAction[]>([
     { key: 1, metadata: {} },
@@ -63,34 +64,43 @@ function CreateZapContent() {
       api.get("/api/v1/trigger/available"),
       api.get("/api/v1/action/available"),
       api.get("/api/v1/user/solana-wallet"),
+      api.get("/api/v1/connections"),
       editId ? api.get(`/api/v1/zap/${editId}`) : Promise.resolve(null),
     ])
-      .then(([triggerResponse, actionResponse, walletResponse, workflowResponse]) => {
-        if (!active) return;
-        setTriggers(triggerResponse.data.availableTriggers);
-        setAvailableActions(actionResponse.data.availableActions);
-        setSolanaWallet(walletResponse.data.wallet);
-        const workflow = workflowResponse?.data.zap as Zap | undefined;
-        if (workflow) {
-          setName(workflow.name);
-          setTrigger(workflow.trigger?.type);
-          setActions(
-            [...workflow.actions]
-              .sort((a, b) => a.sortingOrder - b.sortingOrder)
-              .map((action, index) => ({
-                key: index + 1,
-                app: action.type,
-                metadata: Object.fromEntries(
-                  Object.entries(action.metadata ?? {}).map(([key, value]) => [
-                    key,
-                    String(value),
-                  ]),
-                ),
-              })),
-          );
-          setDirty(false);
-        }
-      })
+      .then(
+        ([
+          triggerResponse,
+          actionResponse,
+          walletResponse,
+          connectionResponse,
+          workflowResponse,
+        ]) => {
+          if (!active) return;
+          setTriggers(triggerResponse.data.availableTriggers);
+          setAvailableActions(actionResponse.data.availableActions);
+          setSolanaWallet(walletResponse.data.wallet);
+          setConnections(connectionResponse.data.connections);
+          const workflow = workflowResponse?.data.zap as Zap | undefined;
+          if (workflow) {
+            setName(workflow.name);
+            setTrigger(workflow.trigger?.type);
+            setActions(
+              [...workflow.actions]
+                .sort((a, b) => a.sortingOrder - b.sortingOrder)
+                .map((action, index) => ({
+                  key: index + 1,
+                  app: action.type,
+                  metadata: Object.fromEntries(
+                    Object.entries(action.metadata ?? {}).map(
+                      ([key, value]) => [key, String(value)],
+                    ),
+                  ),
+                })),
+            );
+            setDirty(false);
+          }
+        },
+      )
       .catch((caught) => {
         if (!active) return;
         if (caught.response?.status === 401) router.replace("/login");
@@ -180,9 +190,15 @@ function CreateZapContent() {
   }
 
   async function save(mode: "draft" | "publish") {
-    if (mode === "publish" && actions.some((action) => action.app?.id === "solana") && !solanaWallet) {
+    if (
+      mode === "publish" &&
+      actions.some((action) => action.app?.id === "solana") &&
+      !solanaWallet
+    ) {
       setError("Create your Solana wallet before publishing this workflow.");
-      const solanaIndex = actions.findIndex((action) => action.app?.id === "solana");
+      const solanaIndex = actions.findIndex(
+        (action) => action.app?.id === "solana",
+      );
       setSelection({ kind: "action", index: solanaIndex });
       return;
     }
@@ -428,7 +444,10 @@ function CreateZapContent() {
                 <Chooser
                   items={availableActions}
                   onSelect={(app) =>
-                    updateAction(selection.index, { app, metadata: {} })
+                    updateAction(selection.index, {
+                      app,
+                      metadata: app.id === "http" ? { method: "POST" } : {},
+                    })
                   }
                   title="Available actions"
                 />
@@ -436,6 +455,7 @@ function CreateZapContent() {
             {!loading && selection.kind === "action" && selectedAction?.app && (
               <ActionConfiguration
                 action={selectedAction}
+                connections={connections}
                 solanaWallet={solanaWallet}
                 walletBusy={walletBusy}
                 onCreateWallet={createSolanaWallet}
@@ -594,11 +614,10 @@ function Chooser({
             <div>
               <div className="font-bold">{app.name}</div>
               <div className="mt-0.5 text-xs text-[#7d756f]">
-                {app.id === "webhook"
-                  ? "Catch a POST request"
-                  : app.id === "email"
-                    ? "Send an email"
-                    : "Transfer SOL"}
+                {app.description ||
+                  (app.id === "webhook"
+                    ? "Catch a POST request"
+                    : "Configure this action")}
               </div>
             </div>
             {selectedId === app.id && (
@@ -613,6 +632,7 @@ function Chooser({
 
 function ActionConfiguration({
   action,
+  connections,
   onChange,
   onChangeApp,
   solanaWallet,
@@ -620,6 +640,7 @@ function ActionConfiguration({
   onCreateWallet,
 }: {
   action: DraftAction;
+  connections: AppConnection[];
   onChange: (metadata: Record<string, string>) => void;
   onChangeApp: () => void;
   solanaWallet: { publicKey: string; network: string } | null;
@@ -650,6 +671,15 @@ function ActionConfiguration({
         </p>
         {action.app?.id === "email" && (
           <div className="mt-5 space-y-4">
+            <ConnectionSelect
+              connectorKey="email"
+              connections={connections}
+              value={metadata.connectionId || ""}
+              optional
+              onChange={(value) =>
+                onChange({ ...metadata, connectionId: value })
+              }
+            />
             <Field
               label="To"
               value={metadata.email || ""}
@@ -672,13 +702,25 @@ function ActionConfiguration({
               </div>
               {solanaWallet ? (
                 <>
-                  <div className="mt-2 break-all font-mono text-xs text-[#4c3b71]">{solanaWallet.publicKey}</div>
-                  <p className="mt-2 text-xs leading-5 text-[#6d6660]">This wallet sends the SOL when the webhook runs.</p>
+                  <div className="mt-2 break-all font-mono text-xs text-[#4c3b71]">
+                    {solanaWallet.publicKey}
+                  </div>
+                  <p className="mt-2 text-xs leading-5 text-[#6d6660]">
+                    This wallet sends the SOL when the webhook runs.
+                  </p>
                 </>
               ) : (
                 <>
-                  <p className="mt-1 text-xs leading-5 text-[#6d6660]">Create your FlowForge devnet wallet before publishing this transfer automation.</p>
-                  <button type="button" onClick={onCreateWallet} disabled={walletBusy} className="mt-3 rounded-lg bg-[#503eb6] px-3 py-2 text-xs font-bold text-white disabled:opacity-50">
+                  <p className="mt-1 text-xs leading-5 text-[#6d6660]">
+                    Create your FlowForge devnet wallet before publishing this
+                    transfer automation.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={onCreateWallet}
+                    disabled={walletBusy}
+                    className="mt-3 rounded-lg bg-[#503eb6] px-3 py-2 text-xs font-bold text-white disabled:opacity-50"
+                  >
                     {walletBusy ? "Creating…" : "Create Solana wallet"}
                   </button>
                 </>
@@ -698,6 +740,99 @@ function ActionConfiguration({
             />
           </div>
         )}
+        {action.app?.id === "http" && (
+          <div className="mt-5 space-y-4">
+            <ConnectionSelect
+              connectorKey="http"
+              connections={connections}
+              value={metadata.connectionId || ""}
+              optional
+              onChange={(value) =>
+                onChange({ ...metadata, connectionId: value })
+              }
+            />
+            <SelectField
+              label="Method"
+              value={metadata.method || "POST"}
+              options={["GET", "POST", "PUT", "PATCH", "DELETE"]}
+              onChange={(value) => onChange({ ...metadata, method: value })}
+            />
+            <Field
+              label="HTTPS URL"
+              value={metadata.url || ""}
+              placeholder="https://api.example.com/items"
+              onChange={(value) => onChange({ ...metadata, url: value })}
+            />
+            <TextArea
+              label="Headers (JSON)"
+              value={metadata.headers || ""}
+              placeholder={'{"content-type":"application/json"}'}
+              onChange={(value) => onChange({ ...metadata, headers: value })}
+            />
+            <TextArea
+              label="Body"
+              value={metadata.body || ""}
+              placeholder={'{"name":"{customer.name}"}'}
+              onChange={(value) => onChange({ ...metadata, body: value })}
+            />
+          </div>
+        )}
+        {action.app?.id === "slack" && (
+          <div className="mt-5 space-y-4">
+            <ConnectionSelect
+              connectorKey="slack"
+              connections={connections}
+              value={metadata.connectionId || ""}
+              onChange={(value) =>
+                onChange({ ...metadata, connectionId: value })
+              }
+            />
+            <Field
+              label="Channel ID"
+              value={metadata.channel || ""}
+              placeholder="C0123456789"
+              onChange={(value) => onChange({ ...metadata, channel: value })}
+            />
+            <TextArea
+              label="Message"
+              value={metadata.text || ""}
+              placeholder="New order from {customer.name}"
+              onChange={(value) => onChange({ ...metadata, text: value })}
+            />
+          </div>
+        )}
+        {action.app?.id === "google-sheets" && (
+          <div className="mt-5 space-y-4">
+            <ConnectionSelect
+              connectorKey="google-sheets"
+              connections={connections}
+              value={metadata.connectionId || ""}
+              onChange={(value) =>
+                onChange({ ...metadata, connectionId: value })
+              }
+            />
+            <Field
+              label="Spreadsheet ID"
+              value={metadata.spreadsheetId || ""}
+              placeholder="1AbC..."
+              onChange={(value) =>
+                onChange({ ...metadata, spreadsheetId: value })
+              }
+            />
+            <Field
+              label="Range"
+              value={metadata.range || ""}
+              placeholder="Sheet1!A:Z"
+              onChange={(value) => onChange({ ...metadata, range: value })}
+            />
+            <TextArea
+              label="Row values (JSON array)"
+              value={metadata.values || ""}
+              placeholder={'["{customer.name}", "{customer.email}"]'}
+              onChange={(value) => onChange({ ...metadata, values: value })}
+            />
+          </div>
+        )}
       </div>
       <div className="mt-5 rounded-xl bg-[#eef8f2] p-4 text-sm text-[#25613d]">
         <strong>✓ Saved in this draft</strong>
@@ -706,6 +841,80 @@ function ActionConfiguration({
         </p>
       </div>
     </div>
+  );
+}
+
+function ConnectionSelect({
+  connectorKey,
+  connections,
+  value,
+  onChange,
+  optional = false,
+}: {
+  connectorKey: string;
+  connections: AppConnection[];
+  value: string;
+  onChange: (value: string) => void;
+  optional?: boolean;
+}) {
+  const matching = connections.filter(
+    (connection) =>
+      connection.connectorKey === connectorKey &&
+      connection.status !== "REVOKED",
+  );
+  return (
+    <label className="block">
+      <span className="mb-2 block text-xs font-bold">Connection</span>
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="w-full rounded-lg border border-[#cfc8c1] bg-white px-3 py-2.5 text-sm"
+      >
+        <option value="">
+          {optional ? "Use default configuration" : "Choose a connection"}
+        </option>
+        {matching.map((connection) => (
+          <option key={connection.id} value={connection.id}>
+            {connection.name}
+          </option>
+        ))}
+      </select>
+      {matching.length === 0 && (
+        <a
+          href="/connections"
+          className="mt-2 inline-block text-xs font-bold text-[#503eb6] hover:underline"
+        >
+          Create a {connectorKey} connection
+        </a>
+      )}
+    </label>
+  );
+}
+
+function SelectField({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: string[];
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-2 block text-xs font-bold">{label}</span>
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="w-full rounded-lg border border-[#cfc8c1] bg-white px-3 py-2.5 text-sm"
+      >
+        {options.map((option) => (
+          <option key={option}>{option}</option>
+        ))}
+      </select>
+    </label>
   );
 }
 
@@ -765,6 +974,18 @@ function actionDescription(id: string, metadata: Record<string, string>) {
     return metadata.amount
       ? `Transfer ${metadata.amount} SOL`
       : "Configure wallet and amount";
+  if (id === "http")
+    return metadata.url
+      ? `${metadata.method || "GET"} ${metadata.url}`
+      : "Configure an HTTPS request";
+  if (id === "slack")
+    return metadata.channel
+      ? `Post to ${metadata.channel}`
+      : "Choose a Slack connection";
+  if (id === "google-sheets")
+    return metadata.range
+      ? `Append to ${metadata.range}`
+      : "Choose a Google connection";
   return "Configured action";
 }
 
@@ -807,6 +1028,50 @@ function validateAction(action: DraftAction) {
     if (!amount) errors.push("Solana actions require an amount.");
     else if (!amount.includes("{") && !(Number(amount) > 0))
       errors.push("Solana amount must be positive or use a payload template.");
+    return errors;
+  }
+  if (action.app.id === "http") {
+    const errors: string[] = [];
+    if (!action.metadata.url?.trim())
+      errors.push("HTTP actions require a URL.");
+    else if (
+      !action.metadata.url.includes("{") &&
+      !action.metadata.url.startsWith("https://")
+    )
+      errors.push("HTTP actions require an HTTPS URL.");
+    if (!action.metadata.method) errors.push("HTTP actions require a method.");
+    for (const field of ["headers", "body"] as const) {
+      const value = action.metadata[field]?.trim();
+      if (field === "headers" && value && !value.includes("{")) {
+        try {
+          JSON.parse(value);
+        } catch {
+          errors.push("HTTP headers must be valid JSON.");
+        }
+      }
+    }
+    return errors;
+  }
+  if (action.app.id === "slack") {
+    const errors: string[] = [];
+    if (!action.metadata.connectionId)
+      errors.push("Slack actions require a connection.");
+    if (!action.metadata.channel?.trim())
+      errors.push("Slack actions require a channel ID.");
+    if (!action.metadata.text?.trim())
+      errors.push("Slack actions require a message.");
+    return errors;
+  }
+  if (action.app.id === "google-sheets") {
+    const errors: string[] = [];
+    if (!action.metadata.connectionId)
+      errors.push("Google Sheets actions require a connection.");
+    if (!action.metadata.spreadsheetId?.trim())
+      errors.push("Google Sheets actions require a spreadsheet ID.");
+    if (!action.metadata.range?.trim())
+      errors.push("Google Sheets actions require a range.");
+    if (!action.metadata.values?.trim())
+      errors.push("Google Sheets actions require row values.");
     return errors;
   }
   return [];
