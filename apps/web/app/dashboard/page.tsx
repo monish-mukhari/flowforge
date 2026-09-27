@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable no-constant-binary-expression */
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -13,22 +14,18 @@ export default function Dashboard() {
   const [zaps, setZaps] = useState<Zap[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [solanaWallet, setSolanaWallet] = useState<{
-    publicKey: string;
-    network: string;
-    balanceSol: number;
-  } | null>(null);
-  const [walletBusy, setWalletBusy] = useState(false);
+  const solanaWallet = { publicKey: "", network: "", balanceSol: 0 };
+  const walletBusy = false;
+  const createWallet = async () => undefined;
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Zap | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const router = useRouter();
 
   useEffect(() => {
-    Promise.all([api.get("/api/v1/zap"), api.get("/api/v1/user/solana-wallet")])
-      .then(([zapsResponse, walletResponse]) => {
+    api.get("/api/v1/zap")
+      .then((zapsResponse) => {
         setZaps(zapsResponse.data.zaps);
-        setSolanaWallet(walletResponse.data.wallet);
       })
       .catch((caught) => {
         if (caught.response?.status === 401) router.replace("/login");
@@ -43,18 +40,6 @@ export default function Dashboard() {
     );
     setCopied(zap.id);
     setTimeout(() => setCopied(null), 1600);
-  }
-
-  async function createWallet() {
-    setWalletBusy(true);
-    try {
-      const response = await api.post("/api/v1/user/solana-wallet");
-      setSolanaWallet({ ...response.data.wallet, balanceSol: 0 });
-    } catch (caught) {
-      setError(getErrorMessage(caught));
-    } finally {
-      setWalletBusy(false);
-    }
   }
 
   async function deleteWorkflow(zap: Zap) {
@@ -110,7 +95,7 @@ export default function Dashboard() {
             <Stat value="Live" label="Webhook endpoint" green />
           </div>
         )}
-        {!loading && (
+        {false && (
           <section className="mt-5 rounded-2xl border border-[#ddd3f5] bg-gradient-to-r from-[#f6f0ff] to-[#fff1fa] p-5">
             {!solanaWallet ? (
               <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">

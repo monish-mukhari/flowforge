@@ -17,6 +17,9 @@ import {
 
 const config = z
   .object({
+    APP_ENV: z
+      .enum(["development", "test", "production"])
+      .default("development"),
     DATABASE_URL: z.string().min(1),
     KAFKA_BROKERS: z.string().min(1),
     WORKER_ID: z.string().min(1).default(`${hostname()}-${process.pid}`),
@@ -38,8 +41,26 @@ const config = z
     LOG_LEVEL: z
       .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
       .default("info"),
+    CONNECTION_ENCRYPTION_KEY: z.string().min(32).optional(),
+    SOLANA_WALLET_ENCRYPTION_KEY: z.string().min(32).optional(),
+    SLACK_CLIENT_ID: z.string().optional(),
+    SLACK_CLIENT_SECRET: z.string().optional(),
+    GOOGLE_CLIENT_ID: z.string().optional(),
+    GOOGLE_CLIENT_SECRET: z.string().optional(),
   })
   .parse(process.env);
+if (config.APP_ENV === "production" && !config.CONNECTION_ENCRYPTION_KEY)
+  throw new Error("CONNECTION_ENCRYPTION_KEY is required in production");
+if (config.APP_ENV === "production" && !config.SOLANA_WALLET_ENCRYPTION_KEY)
+  throw new Error("SOLANA_WALLET_ENCRYPTION_KEY is required in production");
+for (const [provider, clientId, clientSecret] of [
+  ["Slack", config.SLACK_CLIENT_ID, config.SLACK_CLIENT_SECRET],
+  ["Google", config.GOOGLE_CLIENT_ID, config.GOOGLE_CLIENT_SECRET],
+] as const)
+  if (Boolean(clientId) !== Boolean(clientSecret))
+    throw new Error(
+      `${provider} OAuth requires both a client ID and client secret`,
+    );
 
 const eventSchema = z
   .object({
@@ -62,6 +83,7 @@ const kafka = new Kafka({
 
 let consumer: Consumer | undefined;
 let shuttingDown = false;
+let workerReady = false;
 
 async function withTimeout<T>(operation: Promise<T>) {
   let timer: NodeJS.Timeout | undefined;
@@ -138,7 +160,58 @@ async function executeStep(
   step: NonNullable<Awaited<ReturnType<typeof claimStep>>>,
 ) {
   const actionMetadata = metadataSchema.parse(step.input);
-  const runMetadata = metadataSchema.parse(step.zapRun.metadata);
+  const previous = await prisma.zapRunStep.findMany({
+    where: { zapRunId: step.zapRunId, status: "SUCCEEDED" },
+    orderBy: { sortingOrder: "asc" },
+    select: { sortingOrder: true, output: true },
+  });
+  const runMetadata = {
+    ...metadataSchema.parse(step.zapRun.metadata),
+    steps: Object.fromEntries(previous.map((item) => [item.sortingOrder, item.output ?? {}])),
+    last: previous.at(-1)?.output ?? {},
+  };
+  if (step.actionType === "delay") {
+    const delayMs = Math.min(300_000, Math.max(0, Number(actionMetadata.delayMs ?? 0)));
+    if (delayMs) await new Promise((resolve) => setTimeout(resolve, delayMs));
+    return { delayedMs: delayMs };
+  }
+  if (step.actionType === "transform") {
+    const source = actionMetadata.input === undefined
+      ? runMetadata
+      : JSON.parse(parse(String(actionMetadata.input), runMetadata));
+    const operation = String(actionMetadata.operation ?? "identity");
+    if (operation === "json") return { value: source };
+    if (operation === "pick") {
+      const path = String(actionMetadata.path ?? "").split(".").filter(Boolean);
+      let value: unknown = source;
+      for (const key of path) value = value && typeof value === "object" ? (value as Record<string, unknown>)[key] : undefined;
+      return { value };
+    }
+    if (operation === "set") return { value: { [String(actionMetadata.path ?? "value")]: actionMetadata.value } };
+    return { value: source };
+  }
+  if (step.actionType === "filter" || step.actionType === "branch") {
+    const left = actionMetadata.input === undefined ? runMetadata : parse(String(actionMetadata.input), runMetadata);
+    const right = actionMetadata.value;
+    const operator = String(actionMetadata.operator ?? "equals");
+    const matches = operator === "notEquals" ? left !== right : operator === "contains" ? String(left).includes(String(right)) : left === right;
+    return { matched: matches, branch: matches ? "true" : "false" };
+  }
+  if (step.actionType === "loop") {
+    const items = JSON.parse(parse(String(actionMetadata.items ?? "[]"), runMetadata)) as unknown;
+    if (!Array.isArray(items)) throw new Error("Loop items must be a JSON array");
+    const nested = metadataSchema.parse(actionMetadata.action ?? {});
+    const results: unknown[] = [];
+    for (const item of items) {
+      results.push(await executeConnectorAction({
+        actionType: String(nested.actionType), connectorVersion: 1,
+        actionMetadata: nested.actionMetadata && typeof nested.actionMetadata === "object" ? nested.actionMetadata as Record<string, unknown> : {},
+        runMetadata: { ...runMetadata, item }, userId: step.zapRun.zap.userId,
+        idempotencyKey: `${step.idempotencyKey}:${results.length}`,
+      }));
+    }
+    return { count: results.length, results };
+  }
   const connectorResult = await executeConnectorAction({
     actionType: step.actionType,
     connectorVersion: step.connectorVersion,
@@ -341,7 +414,13 @@ async function processEvent(zapRunId: string, stage: number) {
       "workflow step completed",
     );
   } catch (error) {
-    await failStep(step, error);
+    const policy = metadataSchema.parse(step.input).onError;
+    if (policy === "continue") {
+      await completeStep(step, { error: executionErrorMessage(error), continued: true });
+      logger.warn({ zapRunId, stage }, "workflow step failed and continued by policy");
+    } else {
+      await failStep(step, error);
+    }
   } finally {
     clearInterval(heartbeat);
   }
@@ -349,8 +428,13 @@ async function processEvent(zapRunId: string, stage: number) {
 
 function startHealthServer() {
   return createServer(async (req, res) => {
-    if (req.url !== "/health" && req.url !== "/metrics") {
+    if (!["/health", "/ready", "/metrics"].includes(req.url ?? "")) {
       res.writeHead(404).end();
+      return;
+    }
+    if (req.url === "/health") {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ status: "ok", service: "worker" }));
       return;
     }
     try {
@@ -360,10 +444,11 @@ function startHealthServer() {
         prisma.zapRun.count({ where: { status: "DEAD_LETTER" } }),
         prisma.zapRunStep.count({ where: { status: "RETRY_SCHEDULED" } }),
       ]);
-      res.writeHead(200, { "content-type": "application/json" });
+      const status = workerReady && !shuttingDown ? 200 : 503;
+      res.writeHead(status, { "content-type": "application/json" });
       res.end(
         JSON.stringify({
-          status: shuttingDown ? "stopping" : "ok",
+          status: status === 200 ? "ready" : "unavailable",
           service: "worker",
           queue: { queued, running, retryScheduled, deadLetter },
         }),
@@ -390,6 +475,7 @@ async function main() {
   const shutdown = async (signal: string) => {
     if (shuttingDown) return;
     shuttingDown = true;
+    workerReady = false;
     logger.info({ signal }, "worker shutting down gracefully");
     healthServer.close();
     await consumer?.stop();
@@ -399,7 +485,13 @@ async function main() {
   process.once("SIGTERM", () => void shutdown("SIGTERM"));
   process.once("SIGINT", () => void shutdown("SIGINT"));
   await consumer.connect();
-  await consumer.subscribe({ topic: "zap-events" });
+  consumer.on(consumer.events.GROUP_JOIN, () => {
+    workerReady = true;
+  });
+  consumer.on(consumer.events.DISCONNECT, () => {
+    workerReady = false;
+  });
+  await consumer.subscribe({ topic: "zap-events", fromBeginning: true });
   logger.info(
     { workerId: config.WORKER_ID, concurrency: config.WORKER_CONCURRENCY },
     "worker started",
@@ -421,5 +513,5 @@ async function main() {
 
 main().catch((error) => {
   logger.fatal({ err: error }, "worker stopped unexpectedly");
-  process.exitCode = 1;
+  process.exit(1);
 });

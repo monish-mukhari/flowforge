@@ -8,6 +8,12 @@ import {
   decryptConnectionCredentials,
   encryptConnectionCredentials,
 } from "@repo/db/connection-crypto";
+import {
+  ConnectionTokenError,
+  getConnectionAccessToken,
+  isRevokedOAuthError,
+  revokeProviderAccess,
+} from "@repo/db/connection-oauth";
 import { config } from "../config";
 import { asyncRoute, HttpError } from "../errors";
 import { authMiddleware } from "../middleware";
@@ -16,6 +22,7 @@ import {
   connectorRegistry,
   publicConnectorContract,
 } from "../connectors/registry";
+import { logger } from "../logger";
 
 const router = Router();
 const idSchema = z.object({ connectionId: z.string().uuid() });
@@ -170,6 +177,8 @@ async function exchangeGoogle(code: string, codeVerifier: string) {
 }
 
 async function testConnection(connection: {
+  id: string;
+  userId: number;
   connectorKey: string;
   encryptedCredentials: string;
 }) {
@@ -192,7 +201,30 @@ async function testConnection(connection: {
     return;
   }
   if (connection.connectorKey === "http") return;
-  const accessToken = String(credentials.accessToken ?? "");
+  const connectorKey = connection.connectorKey as "slack" | "google-sheets";
+  const accessToken = await getConnectionAccessToken({
+    connectionId: connection.id,
+    connectorKey,
+    userId: connection.userId,
+    clients: {
+      ...(config.SLACK_CLIENT_ID && config.SLACK_CLIENT_SECRET
+        ? {
+            slack: {
+              clientId: config.SLACK_CLIENT_ID,
+              clientSecret: config.SLACK_CLIENT_SECRET,
+            },
+          }
+        : {}),
+      ...(config.GOOGLE_CLIENT_ID && config.GOOGLE_CLIENT_SECRET
+        ? {
+            google: {
+              clientId: config.GOOGLE_CLIENT_ID,
+              clientSecret: config.GOOGLE_CLIENT_SECRET,
+            },
+          }
+        : {}),
+    },
+  });
   const target =
     connection.connectorKey === "slack"
       ? "https://slack.com/api/auth.test"
@@ -205,7 +237,11 @@ async function testConnection(connection: {
     unknown
   >;
   if (!response.ok || (connection.connectorKey === "slack" && body.ok !== true))
-    throw new Error(`${connection.connectorKey} connection test failed`);
+    throw new ConnectionTokenError(
+      `${connection.connectorKey} connection test failed`,
+      String(body.error ?? `HTTP_${response.status}`),
+      isRevokedOAuthError(connectorKey, response.status, body),
+    );
 }
 
 router.get(
@@ -267,7 +303,14 @@ router.post(
         error instanceof Error ? error.message : "Connection test failed";
       await prisma.appConnection.update({
         where: { id: connection.id },
-        data: { status: "ERROR", lastTestedAt: new Date(), lastError: message },
+        data: {
+          status:
+            error instanceof ConnectionTokenError && error.revoked
+              ? "REVOKED"
+              : "ERROR",
+          lastTestedAt: new Date(),
+          lastError: message,
+        },
       });
       throw new HttpError(400, "CONNECTION_TEST_FAILED", message);
     }
@@ -279,11 +322,24 @@ router.delete(
   authMiddleware,
   asyncRoute(async (req, res) => {
     const { connectionId } = idSchema.parse(req.params);
-    const result = await prisma.appConnection.deleteMany({
+    const connection = await prisma.appConnection.findFirst({
       where: { id: connectionId, userId: req.userId! },
     });
-    if (!result.count)
+    if (!connection)
       throw new HttpError(404, "CONNECTION_NOT_FOUND", "Connection not found");
+    if (["slack", "google-sheets"].includes(connection.connectorKey))
+      try {
+        await revokeProviderAccess(
+          connection.connectorKey as "slack" | "google-sheets",
+          connection.encryptedCredentials,
+        );
+      } catch (error) {
+        logger.warn(
+          { err: error, connectionId, connectorKey: connection.connectorKey },
+          "provider token revocation failed; removing local credentials",
+        );
+      }
+    await prisma.appConnection.delete({ where: { id: connection.id } });
     res.status(204).send();
   }),
 );
@@ -302,6 +358,9 @@ router.post(
       );
     const state = randomBytes(32).toString("base64url");
     const verifier = randomBytes(48).toString("base64url");
+    await prisma.oAuthState.deleteMany({
+      where: { expiresAt: { lte: new Date() } },
+    });
     await prisma.oAuthState.create({
       data: {
         userId: req.userId!,
@@ -378,24 +437,31 @@ router.get(
       return res.redirect(
         `${config.APP_PUBLIC_URL}/connections?error=${encodeURIComponent(query.error ?? "authorization_denied")}`,
       );
-    const exchanged =
-      provider === "slack"
-        ? await exchangeSlack(query.code)
-        : await exchangeGoogle(query.code, state.codeVerifier ?? "");
-    await prisma.appConnection.create({
-      data: {
-        userId: state.userId,
-        connectorKey: provider,
-        name: exchanged.externalAccountName,
-        encryptedCredentials: encryptConnectionCredentials(
-          exchanged.credentials,
-        ),
-        externalAccountId: exchanged.externalAccountId,
-        externalAccountName: exchanged.externalAccountName,
-        scopes: exchanged.scopes as Prisma.InputJsonValue,
-        expiresAt: exchanged.expiresAt,
-      },
-    });
+    try {
+      const exchanged =
+        provider === "slack"
+          ? await exchangeSlack(query.code)
+          : await exchangeGoogle(query.code, state.codeVerifier ?? "");
+      await prisma.appConnection.create({
+        data: {
+          userId: state.userId,
+          connectorKey: provider,
+          name: exchanged.externalAccountName,
+          encryptedCredentials: encryptConnectionCredentials(
+            exchanged.credentials,
+          ),
+          externalAccountId: exchanged.externalAccountId,
+          externalAccountName: exchanged.externalAccountName,
+          scopes: exchanged.scopes as Prisma.InputJsonValue,
+          expiresAt: exchanged.expiresAt,
+        },
+      });
+    } catch (error) {
+      logger.warn({ err: error, provider }, "OAuth callback failed");
+      return res.redirect(
+        `${config.APP_PUBLIC_URL}/connections?error=oauth_exchange_failed`,
+      );
+    }
     return res.redirect(
       `${config.APP_PUBLIC_URL}/connections?connected=${provider}`,
     );

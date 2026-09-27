@@ -1,0 +1,16 @@
+{$APP_DOMAIN} {
+	encode zstd gzip
+
+	handle /hooks/* {
+		reverse_proxy hooks:3001
+	}
+
+	handle {
+		reverse_proxy web:3000
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		Referrer-Policy "strict-origin-when-cross-origin"
+	}
+}

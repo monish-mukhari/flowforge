@@ -14,6 +14,7 @@ import { errorHandler, notFoundHandler } from "./errors";
 import { logger } from "./logger";
 import { openApiDocument } from "./openapi";
 import { connectionRouter } from "./router/connection";
+import prisma from "@repo/db/client";
 
 export const app = express();
 app.disable("x-powered-by");
@@ -54,6 +55,15 @@ app.use(
 
 app.get("/health", (_req, res) => {
   res.json({ status: "ok", service: "primary-backend" });
+});
+
+app.get("/ready", async (_req, res) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    res.json({ status: "ready", service: "primary-backend" });
+  } catch {
+    res.status(503).json({ status: "unavailable", service: "primary-backend" });
+  }
 });
 
 app.get("/openapi.json", (_req, res) => {

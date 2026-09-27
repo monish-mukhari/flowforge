@@ -18,10 +18,7 @@ const schema = z.object({
   SMTP_USERNAME: z.string().optional(),
   SMTP_PASSWORD: z.string().optional(),
   EMAIL_FROM: z.string().email().default("no-reply@flowforge.local"),
-  SOLANA_WALLET_ENCRYPTION_KEY: z
-    .string()
-    .min(16)
-    .default("local-devnet-wallet-encryption-key-change-me"),
+  SOLANA_WALLET_ENCRYPTION_KEY: z.string().min(32).optional(),
   CONNECTION_ENCRYPTION_KEY: z.string().min(32).optional(),
   SLACK_CLIENT_ID: z.string().optional(),
   SLACK_CLIENT_SECRET: z.string().optional(),
@@ -47,6 +44,44 @@ if (appEnvironment === "production" && !parsed.data.CONNECTION_ENCRYPTION_KEY)
   throw new Error(
     "CONNECTION_ENCRYPTION_KEY is required in production and must contain at least 32 characters",
   );
+if (
+  appEnvironment === "production" &&
+  !parsed.data.SOLANA_WALLET_ENCRYPTION_KEY
+)
+  throw new Error(
+    "SOLANA_WALLET_ENCRYPTION_KEY is required in production and must contain at least 32 characters",
+  );
+if (
+  appEnvironment === "production" &&
+  new Set([
+    parsed.data.JWT_PASSWORD,
+    parsed.data.CONNECTION_ENCRYPTION_KEY,
+    parsed.data.SOLANA_WALLET_ENCRYPTION_KEY,
+  ]).size !== 3
+)
+  throw new Error(
+    "JWT_PASSWORD and encryption keys must use independent values in production",
+  );
+if (
+  appEnvironment === "production" &&
+  new URL(parsed.data.APP_PUBLIC_URL).protocol !== "https:"
+)
+  throw new Error("APP_PUBLIC_URL must use HTTPS in production");
+if (
+  appEnvironment === "production" &&
+  parsed.data.CORS_ORIGINS.split(",").some(
+    (origin) => new URL(origin.trim()).protocol !== "https:",
+  )
+)
+  throw new Error("Every CORS_ORIGINS entry must use HTTPS in production");
+for (const [provider, clientId, clientSecret] of [
+  ["Slack", parsed.data.SLACK_CLIENT_ID, parsed.data.SLACK_CLIENT_SECRET],
+  ["Google", parsed.data.GOOGLE_CLIENT_ID, parsed.data.GOOGLE_CLIENT_SECRET],
+] as const)
+  if (Boolean(clientId) !== Boolean(clientSecret))
+    throw new Error(
+      `${provider} OAuth requires both a client ID and client secret`,
+    );
 
 export const config = {
   ...parsed.data,
@@ -56,6 +91,10 @@ export const config = {
     .map((value) => value.trim())
     .filter(Boolean),
   COOKIE_SECURE: appEnvironment === "production",
+  APP_PUBLIC_URL: parsed.data.APP_PUBLIC_URL.replace(/\/$/, ""),
+  SOLANA_WALLET_ENCRYPTION_KEY:
+    parsed.data.SOLANA_WALLET_ENCRYPTION_KEY ??
+    "local-devnet-wallet-encryption-key-change-me",
   CONNECTION_ENCRYPTION_KEY:
     parsed.data.CONNECTION_ENCRYPTION_KEY ??
     "local-connection-encryption-key-change-me",

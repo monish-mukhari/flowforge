@@ -13,7 +13,7 @@ x-app-service: &app-service
       NEXT_PUBLIC_HOOKS_URL: ${NEXT_PUBLIC_HOOKS_URL:-http://localhost:3001/hooks/catch}
 
 x-database-env: &database-env
-  DATABASE_URL: postgresql://flowforge:flowforge@postgres:5432/flowforge?schema=public
+  DATABASE_URL: ${DATABASE_URL:-postgresql://flowforge:flowforge@postgres:5432/flowforge?schema=public}
 
 services:
   postgres:
@@ -82,12 +82,14 @@ services:
     environment:
       <<: *database-env
       PORT: 3002
-      APP_ENV: development
+      APP_ENV: ${APP_ENV:-development}
       JWT_PASSWORD: ${JWT_PASSWORD:-local-development-secret-change-me}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
       APP_PUBLIC_URL: ${APP_PUBLIC_URL:-http://localhost:3000}
-      SMTP_ENDPOINT: mailpit
-      SMTP_PORT: 1025
+      SMTP_ENDPOINT: ${SMTP_ENDPOINT:-mailpit}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       EMAIL_FROM: ${EMAIL_FROM:-no-reply@flowforge.local}
       SOLANA_RPC_URL: ${SOLANA_RPC_URL:-https://api.devnet.solana.com}
       SOLANA_WALLET_ENCRYPTION_KEY: ${SOLANA_WALLET_ENCRYPTION_KEY:-local-devnet-wallet-encryption-key-change-me}
@@ -108,7 +110,7 @@ services:
           "CMD",
           "node",
           "-e",
-          "fetch('http://localhost:3002/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+          "fetch('http://localhost:3002/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
         ]
       interval: 5s
       timeout: 5s
@@ -120,7 +122,7 @@ services:
     environment:
       <<: *database-env
       PORT: 3001
-      APP_ENV: development
+      APP_ENV: ${APP_ENV:-development}
       WEBHOOK_BODY_LIMIT: 256kb
       LOG_LEVEL: ${LOG_LEVEL:-info}
     ports:
@@ -134,7 +136,7 @@ services:
           "CMD",
           "node",
           "-e",
-          "fetch('http://localhost:3001/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+          "fetch('http://localhost:3001/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
         ]
       interval: 5s
       timeout: 5s
@@ -147,12 +149,26 @@ services:
       <<: *database-env
       KAFKA_BROKERS: kafka:9092
       SWEEP_INTERVAL_MS: 3000
+      METRICS_PORT: 3004
       LOG_LEVEL: ${LOG_LEVEL:-info}
     depends_on:
       migrate:
         condition: service_completed_successfully
       kafka:
         condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:3004/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    ports:
+      - "3004:3004"
 
   worker:
     <<: *app-service
@@ -160,8 +176,11 @@ services:
     environment:
       <<: *database-env
       KAFKA_BROKERS: kafka:9092
-      SMTP_ENDPOINT: mailpit
-      SMTP_PORT: 1025
+      APP_ENV: ${APP_ENV:-development}
+      SMTP_ENDPOINT: ${SMTP_ENDPOINT:-mailpit}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       SOLANA_RPC_URL: ${SOLANA_RPC_URL:-https://api.devnet.solana.com}
       SOLANA_WALLET_ENCRYPTION_KEY: ${SOLANA_WALLET_ENCRYPTION_KEY:-local-devnet-wallet-encryption-key-change-me}
       CONNECTION_ENCRYPTION_KEY: ${CONNECTION_ENCRYPTION_KEY:-local-connection-encryption-key-change-me}
@@ -191,7 +210,7 @@ services:
           "CMD",
           "node",
           "-e",
-          "fetch('http://localhost:3003/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+          "fetch('http://localhost:3003/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
         ]
       interval: 5s
       timeout: 5s
@@ -209,7 +228,7 @@ services:
     command: ["npm", "run", "start", "--workspace=web", "--", "-H", "0.0.0.0"]
     environment:
       PORT: 3000
-      BACKEND_INTERNAL_URL: http://primary-backend:3002
+      BACKEND_INTERNAL_URL: ${BACKEND_INTERNAL_URL:-http://primary-backend:3002}
     ports:
       - "3000:3000"
     depends_on:

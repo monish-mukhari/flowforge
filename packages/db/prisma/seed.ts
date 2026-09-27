@@ -11,6 +11,8 @@ async function seedDB() {
         image:
           "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTjWUr0rIHZc1vGIRVuGE-lNIDgNInEgStJpQ&s",
       },
+      { id: "schedule", name: "Schedule", image: "schedule" },
+      { id: "polling", name: "Polling", image: "polling" },
     ];
 
     const availableActions = [
@@ -29,6 +31,11 @@ async function seedDB() {
       { id: "http", name: "HTTP Request", image: "http" },
       { id: "slack", name: "Slack", image: "slack" },
       { id: "google-sheets", name: "Google Sheets", image: "google-sheets" },
+      { id: "filter", name: "Filter", image: "filter" },
+      { id: "branch", name: "Branch", image: "branch" },
+      { id: "transform", name: "Transform", image: "transform" },
+      { id: "delay", name: "Delay", image: "delay" },
+      { id: "loop", name: "Loop", image: "loop" },
     ];
 
     await prisma.availableTrigger.createMany({
@@ -67,6 +74,11 @@ async function seedDB() {
         "Append rows through Google OAuth.",
         "OAUTH2",
       ],
+      ["filter", "Filter", "Stop when a condition is false.", "NONE"],
+      ["branch", "Branch", "Select a path from a condition.", "NONE"],
+      ["transform", "Transform", "Shape and map step data.", "NONE"],
+      ["delay", "Delay", "Pause before the next step.", "NONE"],
+      ["loop", "Loop", "Run an action for every item.", "NONE"],
     ] as const;
     for (const [key, name, description, authType] of connectorDefinitions) {
       await prisma.connectorDefinition.upsert({

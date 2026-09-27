@@ -226,7 +226,11 @@ export const connectorRegistry: ConnectorContract[] = [
 ];
 
 export function connectorContract(key: string) {
-  return connectorRegistry.find((connector) => connector.key === key);
+  const existing = connectorRegistry.find((connector) => connector.key === key);
+  if (existing) return existing;
+  if ((["filter", "branch", "transform", "delay", "loop"] as const).includes(key as never))
+    return { key, version: 1, name: key, description: `Built-in ${key} workflow step.`, image: key, authType: "NONE" as const, fields: [], schema: z.record(z.string(), z.unknown()) } as ConnectorContract;
+  return undefined;
 }
 
 export function publicConnectorContract(connector: ConnectorContract) {

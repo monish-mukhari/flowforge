@@ -51,16 +51,16 @@ To test password recovery locally, request a reset from `/forgot-password`, open
 
 ## Services
 
-| Service           | Responsibility                                                          |
-| ----------------- | ----------------------------------------------------------------------- |
-| `web`             | Next.js landing page, auth, dashboard, builder, and workflow detail UI  |
-| `primary-backend` | Users, JWT auth, app catalog, and workflow CRUD API                     |
-| `hooks`           | Receives webhook payloads and atomically creates `ZapRun` + outbox rows |
-| `sweeper`         | Publishes pending outbox rows to the Kafka `zap-events` topic           |
+| Service           | Responsibility                                                                       |
+| ----------------- | ------------------------------------------------------------------------------------ |
+| `web`             | Next.js landing page, auth, dashboard, builder, and workflow detail UI               |
+| `primary-backend` | Users, JWT auth, app catalog, and workflow CRUD API                                  |
+| `hooks`           | Receives webhook payloads and atomically creates `ZapRun` + outbox rows              |
+| `sweeper`         | Publishes pending outbox rows to the Kafka `zap-events` topic                        |
 | `worker`          | Resolves webhook templates and executes versioned connector actions in sorting order |
-| `postgres`        | Workflow configuration, run payloads, and transactional outbox          |
-| `kafka`           | Asynchronous workflow-stage delivery                                    |
-| `mailpit`         | Local SMTP server and browser inbox                                     |
+| `postgres`        | Workflow configuration, run payloads, and transactional outbox                       |
+| `kafka`           | Asynchronous workflow-stage delivery                                                 |
+| `mailpit`         | Local SMTP server and browser inbox                                                  |
 
 ## Payload templates
 
@@ -95,3 +95,11 @@ npm run build
 ```
 
 After the Compose stack is healthy, `npm run smoke` exercises account creation, Mailpit verification, cookie login, workflow creation, secure webhook ingestion, queue processing, email delivery, and logout. HTTP services return stable `{ error: { code, message }, requestId }` errors, propagate `X-Request-Id`, emit structured JSON logs, and redact credentials and webhook bodies.
+
+## Production deployment
+
+Phase 5 adds a production Compose overlay with automatic TLS, fail-closed secrets,
+database-aware readiness probes, concurrency-safe OAuth token rotation, provider
+revocation, and backup/restore tooling. Follow the
+[production runbook](docs/production-runbook.md) for launch, rollback, monitoring,
+provider approval, and live integration acceptance.

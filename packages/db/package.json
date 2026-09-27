@@ -21,7 +21,8 @@
   },
   "exports": {
     "./client": "./src/index.ts",
-    "./connection-crypto": "./src/connection-crypto.ts"
+    "./connection-crypto": "./src/connection-crypto.ts",
+    "./connection-oauth": "./src/connection-oauth.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.1",

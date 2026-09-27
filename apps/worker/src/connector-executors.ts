@@ -1,11 +1,11 @@
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
-import type { AppConnection } from "@prisma/client";
 import prisma from "@repo/db/client";
+import { decryptConnectionCredentials } from "@repo/db/connection-crypto";
 import {
-  decryptConnectionCredentials,
-  encryptConnectionCredentials,
-} from "@repo/db/connection-crypto";
+  getConnectionAccessToken,
+  isRevokedOAuthError,
+} from "@repo/db/connection-oauth";
 import { z } from "zod";
 import { parse } from "./parser";
 import { sendEmail } from "./email";
@@ -30,73 +30,22 @@ async function ownedConnection(
   return connection;
 }
 
-async function accessToken(connection: AppConnection) {
-  const credentials = decryptConnectionCredentials(
-    connection.encryptedCredentials,
-  );
-  const current = String(credentials.accessToken ?? "");
-  if (!current)
-    throw new Error(
-      `${connection.connectorKey} connection has no access token`,
-    );
-  if (
-    !connection.expiresAt ||
-    connection.expiresAt.getTime() > Date.now() + 60_000
-  )
-    return current;
-  const refreshToken = String(credentials.refreshToken ?? "");
-  if (!refreshToken)
-    throw new Error(`${connection.connectorKey} connection has expired`);
-  let response: Response;
-  if (connection.connectorKey === "google-sheets") {
-    if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET)
-      throw new Error("Google OAuth refresh is not configured");
-    response = await fetch("https://oauth2.googleapis.com/token", {
-      method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        client_id: process.env.GOOGLE_CLIENT_ID,
-        client_secret: process.env.GOOGLE_CLIENT_SECRET,
-        refresh_token: refreshToken,
-        grant_type: "refresh_token",
-      }),
-    });
-  } else {
-    if (!process.env.SLACK_CLIENT_ID || !process.env.SLACK_CLIENT_SECRET)
-      throw new Error("Slack OAuth refresh is not configured");
-    response = await fetch("https://slack.com/api/oauth.v2.access", {
-      method: "POST",
-      headers: {
-        authorization: `Basic ${Buffer.from(`${process.env.SLACK_CLIENT_ID}:${process.env.SLACK_CLIENT_SECRET}`).toString("base64")}`,
-        "content-type": "application/x-www-form-urlencoded",
-      },
-      body: new URLSearchParams({
-        grant_type: "refresh_token",
-        refresh_token: refreshToken,
-      }),
-    });
-  }
-  const body = (await response.json()) as Record<string, unknown>;
-  if (!response.ok || typeof body.access_token !== "string")
-    throw new Error(`${connection.connectorKey} token refresh failed`);
-  const nextCredentials = {
-    ...credentials,
-    accessToken: body.access_token,
-    refreshToken: body.refresh_token ?? refreshToken,
-  };
+async function recordOAuthActionFailure(
+  connectionId: string,
+  connectorKey: "slack" | "google-sheets",
+  responseStatus: number,
+  body: Record<string, unknown>,
+  message: string,
+) {
   await prisma.appConnection.update({
-    where: { id: connection.id },
+    where: { id: connectionId },
     data: {
-      encryptedCredentials: encryptConnectionCredentials(nextCredentials),
-      expiresAt:
-        typeof body.expires_in === "number"
-          ? new Date(Date.now() + body.expires_in * 1000)
-          : null,
-      status: "ACTIVE",
-      lastError: null,
+      status: isRevokedOAuthError(connectorKey, responseStatus, body)
+        ? "REVOKED"
+        : "ERROR",
+      lastError: message,
     },
   });
-  return body.access_token;
 }
 
 function privateAddress(address: string) {
@@ -242,7 +191,11 @@ export async function executeConnectorAction(input: {
       userId,
       "slack",
     );
-    const token = await accessToken(connection);
+    const token = await getConnectionAccessToken({
+      connectionId: connection.id,
+      connectorKey: "slack",
+      userId,
+    });
     const response = await fetch("https://slack.com/api/chat.postMessage", {
       method: "POST",
       headers: {
@@ -255,10 +208,17 @@ export async function executeConnectorAction(input: {
       }),
     });
     const body = (await response.json()) as Record<string, unknown>;
-    if (!response.ok || body.ok !== true)
-      throw new Error(
-        `Slack message failed: ${String(body.error ?? response.status)}`,
+    if (!response.ok || body.ok !== true) {
+      const message = `Slack message failed: ${String(body.error ?? response.status)}`;
+      await recordOAuthActionFailure(
+        connection.id,
+        "slack",
+        response.status,
+        body,
+        message,
       );
+      throw new Error(message);
+    }
     return { channel: body.channel, timestamp: body.ts };
   }
   if (actionType === "google-sheets") {
@@ -267,7 +227,11 @@ export async function executeConnectorAction(input: {
       userId,
       "google-sheets",
     );
-    const token = await accessToken(connection);
+    const token = await getConnectionAccessToken({
+      connectionId: connection.id,
+      connectorKey: "google-sheets",
+      userId,
+    });
     const spreadsheetId = parse(
       String(actionMetadata.spreadsheetId),
       runMetadata,
@@ -288,10 +252,17 @@ export async function executeConnectorAction(input: {
       body: JSON.stringify({ majorDimension: "ROWS", values: [values] }),
     });
     const body = (await response.json()) as Record<string, unknown>;
-    if (!response.ok)
-      throw new Error(
-        `Google Sheets append failed: ${String((body.error as { message?: string } | undefined)?.message ?? response.status)}`,
+    if (!response.ok) {
+      const message = `Google Sheets append failed: ${String((body.error as { message?: string } | undefined)?.message ?? response.status)}`;
+      await recordOAuthActionFailure(
+        connection.id,
+        "google-sheets",
+        response.status,
+        body,
+        message,
       );
+      throw new Error(message);
+    }
     return { spreadsheetId: body.spreadsheetId, updates: body.updates };
   }
   return null;

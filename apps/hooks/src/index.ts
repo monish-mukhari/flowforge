@@ -109,6 +109,15 @@ app.get("/health", (_req, res) => {
   res.json({ status: "ok", service: "hooks" });
 });
 
+app.get("/ready", async (_req, res) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    res.json({ status: "ready", service: "hooks" });
+  } catch {
+    res.status(503).json({ status: "unavailable", service: "hooks" });
+  }
+});
+
 function sendWebhookError(
   res: Parameters<RequestHandler>[1],
   requestId: unknown,

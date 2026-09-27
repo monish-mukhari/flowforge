@@ -1,0 +1,73 @@
+services:
+  postgres:
+    ports: !reset []
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required when using bundled PostgreSQL}
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
+
+  migrate:
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+
+  primary-backend:
+    ports: !reset []
+    environment:
+      APP_ENV: production
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      APP_PUBLIC_URL: ${APP_PUBLIC_URL:?APP_PUBLIC_URL is required}
+      CORS_ORIGINS: ${CORS_ORIGINS:?CORS_ORIGINS is required}
+      JWT_PASSWORD: ${JWT_PASSWORD:?JWT_PASSWORD is required}
+      CONNECTION_ENCRYPTION_KEY: ${CONNECTION_ENCRYPTION_KEY:?CONNECTION_ENCRYPTION_KEY is required}
+      SOLANA_WALLET_ENCRYPTION_KEY: ${SOLANA_WALLET_ENCRYPTION_KEY:?SOLANA_WALLET_ENCRYPTION_KEY is required}
+
+  hooks:
+    ports: !reset []
+    environment:
+      APP_ENV: production
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+
+  sweeper:
+    ports: !reset []
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+
+  worker:
+    ports: !reset []
+    environment:
+      APP_ENV: production
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      CONNECTION_ENCRYPTION_KEY: ${CONNECTION_ENCRYPTION_KEY:?CONNECTION_ENCRYPTION_KEY is required}
+      SOLANA_WALLET_ENCRYPTION_KEY: ${SOLANA_WALLET_ENCRYPTION_KEY:?SOLANA_WALLET_ENCRYPTION_KEY is required}
+
+  mailpit:
+    ports: !reset []
+
+  web:
+    ports: !reset []
+    environment:
+      BACKEND_INTERNAL_URL: http://primary-backend:3002
+
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?APP_DOMAIN is required}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      web:
+        condition: service_started
+      hooks:
+        condition: service_healthy
+    networks: [flowforge]
+
+volumes:
+  caddy-data:
+  caddy-config:

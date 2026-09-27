@@ -262,6 +262,32 @@ router.get(
   }),
 );
 
+router.get(
+  "/:zapId/export",
+  authMiddleware,
+  asyncRoute(async (req, res) => {
+    const { zapId } = ZapIdSchema.parse(req.params);
+    const workflow = await findOwnedWorkflow(req.userId!, zapId);
+    res.json({ version: 1, workflow: { name: workflow.name, description: workflow.description, trigger: { id: workflow.trigger?.triggerId, metadata: workflow.trigger?.metadata ?? {} }, actions: workflow.actions.map((action) => ({ id: action.actionId, metadata: action.metadata })) } });
+  }),
+);
+
+router.post(
+  "/import",
+  authMiddleware,
+  asyncRoute(async (req, res) => {
+    const input = z.object({ version: z.number().int().default(1), workflow: z.object({ name: z.string().trim().min(1).max(120), description: z.string().max(1000).nullable().optional(), trigger: z.object({ id: z.string().min(1), metadata: z.record(z.string(), z.unknown()).default({}) }), actions: z.array(z.object({ id: z.string().min(1), metadata: z.record(z.string(), z.unknown()).default({}) })).min(1).max(25) }) }).parse(req.body);
+    const createInput = { name: input.workflow.name, description: input.workflow.description, availableTriggerId: input.workflow.trigger.id, triggerMetadata: input.workflow.trigger.metadata, actions: input.workflow.actions.map((action) => ({ availableActionId: action.id, actionMetadata: action.metadata })) };
+    await ensureAvailableConnectors(req.userId!, createInput.availableTriggerId, createInput.actions);
+    const workflow = await prisma.$transaction(async (tx) => {
+      const zap = await tx.zap.create({ data: { userId: req.userId!, name: createInput.name, description: createInput.description, triggerId: "", webhookSecret: randomBytes(32).toString("base64url"), actions: { create: createInput.actions.map((action, sortingOrder) => ({ actionId: action.availableActionId, sortingOrder, metadata: action.actionMetadata as Prisma.InputJsonValue })) } } });
+      await tx.trigger.create({ data: { zapId: zap.id, triggerId: createInput.availableTriggerId, metadata: createInput.triggerMetadata as Prisma.InputJsonValue } });
+      return tx.zap.update({ where: { id: zap.id }, data: { triggerId: (await tx.trigger.findUniqueOrThrow({ where: { zapId: zap.id } })).id }, include: workflowInclude });
+    });
+    res.status(201).json({ zapId: workflow.id, zap: workflow });
+  }),
+);
+
 router.patch(
   "/:zapId",
   authMiddleware,

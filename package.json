@@ -11,6 +11,9 @@
     "test": "vitest run",
     "verify": "npm run check-types && npm run test && npm run build",
     "smoke": "node scripts/smoke.mjs",
+    "db:backup": "node scripts/postgres-backup.mjs backup",
+    "db:verify-backup": "node scripts/postgres-backup.mjs verify",
+    "db:restore": "node scripts/postgres-backup.mjs restore",
     "format": "prettier --write \"**/*.{ts,tsx,md}\""
   },
   "devDependencies": {

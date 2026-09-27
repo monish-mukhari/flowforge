@@ -7,6 +7,8 @@ const colors: Record<string, string> = {
   http: "bg-[#2563eb]",
   slack: "bg-[#4a154b]",
   "google-sheets": "bg-white ring-1 ring-[#34a853]/25",
+  schedule: "bg-[#0f766e]",
+  polling: "bg-[#1d4ed8]",
 };
 
 const assets: Record<string, string> = {
@@ -39,11 +41,19 @@ function SolanaIcon() {
   );
 }
 
+function ScheduleIcon() {
+  return <svg viewBox="0 0 24 24" className="h-[68%] w-[68%]" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><circle cx="12" cy="12" r="8.5" /><path d="M12 7v5l3.5 2M8 3.8 6.3 2M16 3.8 17.7 2" strokeLinecap="round" /></svg>;
+}
+
+function PollingIcon() {
+  return <svg viewBox="0 0 24 24" className="h-[68%] w-[68%]" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M4 7.5h10M4 12h16M4 16.5h10" strokeLinecap="round" /><path d="m16 5 3 2.5-3 2.5M8 14l-3 2.5L8 19" strokeLinecap="round" strokeLinejoin="round" /></svg>;
+}
+
 export function AppIcon({
   app,
   size = "md",
 }: {
-  app?: Pick<AppOption, "id" | "name"> | null;
+  app?: (Pick<AppOption, "id" | "name"> & { image?: string }) | null;
   size?: "sm" | "md" | "lg";
 }) {
   const dimension =
@@ -60,6 +70,10 @@ export function AppIcon({
     />
   ) : app?.id === "solana" ? (
     <SolanaIcon />
+  ) : app?.id === "schedule" ? (
+    <ScheduleIcon />
+  ) : app?.id === "polling" ? (
+    <PollingIcon />
   ) : (
     (app?.name?.charAt(0).toUpperCase() ?? "+")
   );

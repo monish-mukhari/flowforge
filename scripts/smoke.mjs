@@ -2,6 +2,8 @@ const apiUrl = process.env.BACKEND_URL || "http://localhost:3002";
 const hooksUrl = process.env.HOOKS_URL || "http://localhost:3001/hooks/catch";
 const mailpitUrl = process.env.MAILPIT_URL || "http://localhost:8025";
 const workerUrl = process.env.WORKER_URL || "http://localhost:3003";
+const sweeperUrl = process.env.SWEEPER_URL || "http://localhost:3004";
+const hooksOrigin = new URL(hooksUrl).origin;
 const email = `smoke-${Date.now()}@example.com`;
 const password = "smoke-test-password";
 
@@ -41,12 +43,20 @@ async function mailWithSubject(subject) {
 }
 
 await waitFor(
-  async () => (await fetch(`${apiUrl}/health`).catch(() => undefined))?.ok,
-  "primary API",
+  async () => (await fetch(`${apiUrl}/ready`).catch(() => undefined))?.ok,
+  "primary API readiness",
 );
 await waitFor(
-  async () => (await fetch(`${workerUrl}/health`).catch(() => undefined))?.ok,
-  "worker health endpoint",
+  async () => (await fetch(`${hooksOrigin}/ready`).catch(() => undefined))?.ok,
+  "hooks API readiness",
+);
+await waitFor(
+  async () => (await fetch(`${workerUrl}/ready`).catch(() => undefined))?.ok,
+  "worker readiness endpoint",
+);
+await waitFor(
+  async () => (await fetch(`${sweeperUrl}/ready`).catch(() => undefined))?.ok,
+  "sweeper readiness endpoint",
 );
 await request(`${apiUrl}/api/v1/user/signup`, {
   method: "POST",
@@ -304,4 +314,4 @@ await request(`${apiUrl}/api/v1/user/logout`, {
   method: "POST",
   headers: { cookie: cookies },
 });
-console.log(`Phase 4 smoke test passed for ${workflow.id}`);
+console.log(`Phase 5 smoke test passed for ${workflow.id}`);

@@ -10,8 +10,9 @@ export function parse(text: string, values: unknown) {
         if (
           !current ||
           typeof current !== "object" ||
-          Array.isArray(current) ||
-          !Object.prototype.hasOwnProperty.call(current, key)
+          (Array.isArray(current)
+            ? !/^\d+$/.test(key) || Number(key) >= current.length
+            : !Object.prototype.hasOwnProperty.call(current, key))
         )
           throw new Error(`Template value not found: ${path}`);
         current = (current as Record<string, unknown>)[key];

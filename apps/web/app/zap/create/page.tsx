@@ -7,6 +7,7 @@ import { AppIcon } from "../../../components/AppIcon";
 import { api, getErrorMessage } from "../../../lib/api";
 import type { AppConnection, AppOption, Zap } from "../../../lib/types";
 import { insertItem, reorderItem } from "../../../lib/workflow-order";
+import { starterTemplates } from "../../../lib/templates";
 
 type DraftAction = {
   key: number;
@@ -21,6 +22,7 @@ function CreateZapContent() {
   const [availableActions, setAvailableActions] = useState<AppOption[]>([]);
   const [connections, setConnections] = useState<AppConnection[]>([]);
   const [trigger, setTrigger] = useState<AppOption>();
+  const [triggerMetadata, setTriggerMetadata] = useState<Record<string, string>>({});
   const [actions, setActions] = useState<DraftAction[]>([
     { key: 1, metadata: {} },
   ]);
@@ -54,6 +56,7 @@ function CreateZapContent() {
     if (!editId) {
       setName("Untitled workflow");
       setTrigger(undefined);
+      setTriggerMetadata({});
       setActions([{ key: Date.now(), metadata: {} }]);
       setSelection({ kind: "trigger" });
       setDirty(false);
@@ -84,6 +87,7 @@ function CreateZapContent() {
           if (workflow) {
             setName(workflow.name);
             setTrigger(workflow.trigger?.type);
+            setTriggerMetadata(Object.fromEntries(Object.entries(workflow.trigger?.metadata ?? {}).map(([key, value]) => [key, String(value)])));
             setActions(
               [...workflow.actions]
                 .sort((a, b) => a.sortingOrder - b.sortingOrder)
@@ -98,6 +102,19 @@ function CreateZapContent() {
                 })),
             );
             setDirty(false);
+          } else if (searchParams.get("template")) {
+            const template = starterTemplates.find((item) => item.id === searchParams.get("template"));
+            if (template) {
+              const selectedTrigger = triggerResponse.data.availableTriggers.find((item: AppOption) => item.id === template.trigger);
+              if (selectedTrigger) {
+                setName(template.name);
+                setTrigger(selectedTrigger);
+                setTriggerMetadata(template.triggerMetadata ?? {});
+                setActions(template.actions.map((action, index) => ({ key: Date.now() + index, app: actionResponse.data.availableActions.find((item: AppOption) => item.id === action.id), metadata: { ...action.metadata } })));
+                setSelection({ kind: "trigger" });
+                setDirty(true);
+              }
+            }
           }
         },
       )
@@ -112,11 +129,11 @@ function CreateZapContent() {
     return () => {
       active = false;
     };
-  }, [editId, router]);
+  }, [editId, router, searchParams]);
 
   const validationErrors = useMemo(
-    () => validateDraft(name, trigger, actions),
-    [actions, name, trigger],
+    () => validateDraft(name, trigger, triggerMetadata, actions),
+    [actions, name, trigger, triggerMetadata],
   );
 
   useEffect(() => {
@@ -152,7 +169,7 @@ function CreateZapContent() {
       }
       setAutosaveState("saving");
       void api
-        .patch(`/api/v1/zap/${editId}`, buildPayload(name, trigger!, actions))
+        .patch(`/api/v1/zap/${editId}`, buildPayload(name, trigger!, triggerMetadata, actions))
         .then(() => {
           setDirty(false);
           setAutosaveState("saved");
@@ -161,7 +178,7 @@ function CreateZapContent() {
         .catch(() => setAutosaveState("error"));
     }, 800);
     return () => window.clearTimeout(timer);
-  }, [actions, dirty, editId, loading, name, trigger, validationErrors.length]);
+  }, [actions, dirty, editId, loading, name, trigger, triggerMetadata, validationErrors.length]);
 
   function updateAction(index: number, next: Partial<DraftAction>) {
     setDirty(true);
@@ -222,7 +239,7 @@ function CreateZapContent() {
     setError("");
     setSavingMode(mode);
     try {
-      const payload = buildPayload(name, trigger, actions);
+      const payload = buildPayload(name, trigger, triggerMetadata, actions);
       const response = editId
         ? await api.patch(`/api/v1/zap/${editId}`, payload)
         : await api.post("/api/v1/zap", payload);
@@ -433,10 +450,17 @@ function CreateZapContent() {
                 selectedId={trigger?.id}
                 onSelect={(app) => {
                   setTrigger(app);
+                  setTriggerMetadata(app.id === "schedule" ? { intervalSeconds: "60" } : app.id === "polling" ? { intervalSeconds: "60", method: "GET" } : {});
                   setDirty(true);
                 }}
                 title="Trigger event"
               />
+            )}
+            {!loading && selection.kind === "trigger" && trigger && (trigger.id === "schedule" || trigger.id === "polling") && (
+              <div className="mt-5 space-y-3">
+                <label className="block text-sm font-semibold">Interval (seconds)<input className="mt-1 w-full rounded-lg border p-2" value={triggerMetadata.intervalSeconds ?? "60"} onChange={(e) => { setTriggerMetadata({ ...triggerMetadata, intervalSeconds: e.target.value }); setDirty(true); }} /></label>
+                {trigger.id === "polling" && <label className="block text-sm font-semibold">HTTPS URL<input className="mt-1 w-full rounded-lg border p-2" value={triggerMetadata.url ?? ""} onChange={(e) => { setTriggerMetadata({ ...triggerMetadata, url: e.target.value }); setDirty(true); }} placeholder="https://api.example.com/feed" /></label>}
+              </div>
             )}
             {!loading &&
               selection.kind === "action" &&
@@ -992,12 +1016,13 @@ function actionDescription(id: string, metadata: Record<string, string>) {
 function buildPayload(
   name: string,
   trigger: AppOption,
+  triggerMetadata: Record<string, string>,
   actions: DraftAction[],
 ) {
   return {
     name: name.trim(),
     availableTriggerId: trigger.id,
-    triggerMetadata: {},
+    triggerMetadata,
     actions: actions.map((action) => ({
       availableActionId: action.app!.id,
       actionMetadata: action.metadata,
@@ -1077,14 +1102,11 @@ function validateAction(action: DraftAction) {
   return [];
 }
 
-function validateDraft(
-  name: string,
-  trigger: AppOption | undefined,
-  actions: DraftAction[],
-) {
+function validateDraft(name: string, trigger: AppOption | undefined, triggerMetadata: Record<string, string>, actions: DraftAction[]) {
   const errors: string[] = [];
   if (!name.trim()) errors.push("Give the workflow a name.");
   if (!trigger) errors.push("Choose a trigger.");
+  if (trigger?.id === "polling" && !triggerMetadata.url?.startsWith("https://")) errors.push("Polling triggers require an HTTPS URL.");
   if (!actions.length) errors.push("Add at least one action.");
   actions.forEach((action) => errors.push(...validateAction(action)));
   return [...new Set(errors)];

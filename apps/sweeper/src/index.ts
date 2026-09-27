@@ -1,7 +1,10 @@
 import prisma from "@repo/db/client";
+import type { Prisma } from "@prisma/client";
+import { createServer } from "node:http";
 import { Kafka } from "kafkajs";
 import pino from "pino";
 import { z } from "zod";
+import { createHash, randomUUID } from "node:crypto";
 
 const config = z
   .object({
@@ -13,6 +16,7 @@ const config = z
       .min(100)
       .max(60_000)
       .default(3000),
+    METRICS_PORT: z.coerce.number().int().min(1).max(65_535).default(3004),
     LOG_LEVEL: z
       .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
       .default("info"),
@@ -24,6 +28,39 @@ const kafka = new Kafka({
   brokers: config.KAFKA_BROKERS.split(",").map((value) => value.trim()),
 });
 let stopping = false;
+let ready = false;
+let lastSweepAt: Date | undefined;
+
+function startHealthServer() {
+  return createServer(async (req, res) => {
+    if (req.url !== "/health" && req.url !== "/ready") {
+      res.writeHead(404).end();
+      return;
+    }
+    if (req.url === "/health") {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ status: "ok", service: "sweeper" }));
+      return;
+    }
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+      const status = ready && !stopping ? 200 : 503;
+      res.writeHead(status, { "content-type": "application/json" });
+      res.end(
+        JSON.stringify({
+          status: status === 200 ? "ready" : "unavailable",
+          service: "sweeper",
+          lastSweepAt: lastSweepAt?.toISOString() ?? null,
+        }),
+      );
+    } catch {
+      res.writeHead(503, { "content-type": "application/json" });
+      res.end(JSON.stringify({ status: "unavailable", service: "sweeper" }));
+    }
+  }).listen(config.METRICS_PORT, "0.0.0.0", () =>
+    logger.info({ port: config.METRICS_PORT }, "sweeper health server started"),
+  );
+}
 
 async function recoverExpiredLeases() {
   const now = new Date();
@@ -123,6 +160,59 @@ async function logQueueHealth() {
   logger.info({ ready, retryScheduled, leased, deadLetter }, "queue health");
 }
 
+async function enqueueTriggeredRun(zap: any, version: any, metadata: Record<string, unknown>, key: string) {
+  const snapshot = version?.definition as { actions?: Array<{ availableActionId: string; connectorVersion?: number; actionMetadata?: unknown; sortingOrder: number }> } | undefined;
+  if (!snapshot?.actions) return;
+  try {
+    await prisma.zapRun.create({
+      data: {
+        id: randomUUID(), zapId: zap.id, workflowVersionId: version.id,
+        definitionSnapshot: version.definition as Prisma.InputJsonValue, metadata: metadata as Prisma.InputJsonValue, idempotencyKey: key,
+        status: "QUEUED",
+        steps: { create: snapshot.actions.map((action) => ({ sortingOrder: action.sortingOrder, actionType: action.availableActionId, connectorVersion: action.connectorVersion ?? 1, input: (action.actionMetadata ?? {}) as any, idempotencyKey: `${key}:${action.sortingOrder}` })) },
+        zapRunOutbox: { create: { stage: 0 } },
+      },
+    });
+  } catch (error: any) {
+    if (error?.code !== "P2002") throw error;
+  }
+}
+
+async function scheduleRuns() {
+  const zaps = await prisma.zap.findMany({
+    where: { status: "PUBLISHED" },
+    include: { trigger: true, versions: true },
+  });
+  const now = Date.now();
+  for (const zap of zaps) {
+    const trigger = zap.trigger;
+    if (!trigger || !["schedule", "polling"].includes(trigger.triggerId)) continue;
+    const metadata = (trigger.metadata ?? {}) as Record<string, unknown>;
+    const intervalSeconds = Math.max(10, Number(metadata.intervalSeconds ?? 60));
+    const slot = Math.floor(now / (intervalSeconds * 1000));
+    const version = zap.versions.find((item) => item.version === zap.publishedVersion);
+    if (!version) continue;
+    if (trigger.triggerId === "schedule") {
+      await enqueueTriggeredRun(zap, version, { trigger: { type: "schedule", firedAt: new Date().toISOString() } }, `schedule:${zap.id}:${slot}`);
+      continue;
+    }
+    const url = String(metadata.url ?? "");
+    if (!url) continue;
+    try {
+      const parsed = new URL(url);
+      if (parsed.protocol !== "https:") continue;
+      const response = await fetch(parsed, { method: String(metadata.method ?? "GET"), headers: { accept: "application/json", ...(metadata.headers && typeof metadata.headers === "object" ? metadata.headers as Record<string, string> : {}) } });
+      const body = (await response.text()).slice(0, 64_000);
+      const hash = createHash("sha256").update(body).digest("hex");
+      if (hash === metadata.lastPollHash) continue;
+      await enqueueTriggeredRun(zap, version, { trigger: { type: "polling", url, status: response.status }, poll: { body } }, `polling:${zap.id}:${hash}`);
+      await prisma.trigger.update({ where: { id: trigger.id }, data: { metadata: { ...metadata, lastPollHash: hash, lastPolledAt: new Date().toISOString() } as Prisma.InputJsonValue } });
+    } catch (error) {
+      logger.warn({ zapId: zap.id, err: error }, "polling trigger failed");
+    }
+  }
+}
+
 async function main() {
   const producer = kafka.producer();
   const shutdown = (signal: string) => {
@@ -139,21 +229,27 @@ async function main() {
   });
   await admin.disconnect();
   await producer.connect();
+  ready = true;
+  const healthServer = startHealthServer();
   logger.info("sweeper started");
   let sweepCount = 0;
   while (!stopping) {
+    await scheduleRuns();
     await recoverExpiredLeases();
     await publishAvailable(producer);
+    lastSweepAt = new Date();
     if (sweepCount++ % 20 === 0) await logQueueHealth();
     await new Promise((resolve) =>
       setTimeout(resolve, config.SWEEP_INTERVAL_MS),
     );
   }
+  ready = false;
+  healthServer.close();
   await producer.disconnect();
   await prisma.$disconnect();
 }
 
 main().catch((error) => {
   logger.fatal({ err: error }, "sweeper stopped unexpectedly");
-  process.exitCode = 1;
+  process.exit(1);
 });

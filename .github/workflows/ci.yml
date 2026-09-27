@@ -20,6 +20,8 @@ jobs:
       - run: npm run check-types
       - run: npm test
       - run: npm run build
+      - name: Validate production Compose configuration
+        run: docker compose --env-file .env.production.example -f compose.yaml -f compose.production.yaml config --quiet
 
   docker-smoke:
     runs-on: ubuntu-latest
