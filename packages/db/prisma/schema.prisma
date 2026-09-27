@@ -60,6 +60,12 @@ model User {
   runNotifications        RunNotification[]
   appConnections          AppConnection[]
   oauthStates             OAuthState[]
+  organizationsOwned      Organization[]          @relation("OrganizationOwner")
+  memberships             OrganizationMember[]
+  invitationsSent         OrganizationInvitation[] @relation("InvitationSender")
+  auditEvents             AuditEvent[]
+  approvalsRequested      PublishApproval[] @relation("ApprovalRequester")
+  approvalsReviewed       PublishApproval[] @relation("ApprovalReviewer")
 }
 
 model SolanaWallet {
@@ -135,9 +141,13 @@ model Zap {
   requireSignature Boolean              @default(false) @map("require_signature")
   createdAt        DateTime             @default(now()) @map("created_at")
   updatedAt        DateTime             @updatedAt @map("updated_at")
+  organizationId   String?              @map("organization_id")
+  organization     Organization?        @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  publishApprovals PublishApproval[]
 
   @@index([userId])
   @@index([userId, status, updatedAt])
+  @@index([organizationId, status, updatedAt])
 }
 
 model WorkflowVersion {
@@ -235,8 +245,93 @@ model AppConnection {
   lastError            String?   @map("last_error")
   createdAt            DateTime  @default(now()) @map("created_at")
   updatedAt            DateTime  @updatedAt @map("updated_at")
+  organizationId       String?   @map("organization_id")
+  organization         Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
 
   @@index([userId, connectorKey, status])
+}
+
+enum OrganizationRole {
+  OWNER
+  ADMIN
+  EDITOR
+  VIEWER
+}
+
+model Organization {
+  id          String   @id @default(uuid())
+  name        String
+  slug        String   @unique
+  ownerId     Int      @map("owner_id")
+  owner       User     @relation("OrganizationOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  members     OrganizationMember[]
+  invitations OrganizationInvitation[]
+  zaps        Zap[]
+  connections AppConnection[]
+  auditEvents AuditEvent[]
+  approvals   PublishApproval[]
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  @@index([ownerId])
+}
+
+model OrganizationMember {
+  id             String           @id @default(uuid())
+  organizationId String           @map("organization_id")
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         Int              @map("user_id")
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role           OrganizationRole @default(VIEWER)
+  createdAt      DateTime         @default(now()) @map("created_at")
+  updatedAt      DateTime         @updatedAt @map("updated_at")
+  @@unique([organizationId, userId])
+  @@index([userId])
+}
+
+model OrganizationInvitation {
+  id             String           @id @default(uuid())
+  organizationId String           @map("organization_id")
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  email          String
+  role           OrganizationRole @default(VIEWER)
+  tokenHash      String           @unique @map("token_hash")
+  invitedById    Int              @map("invited_by_id")
+  invitedBy      User             @relation("InvitationSender", fields: [invitedById], references: [id], onDelete: Cascade)
+  expiresAt      DateTime         @map("expires_at")
+  acceptedAt     DateTime?        @map("accepted_at")
+  createdAt      DateTime         @default(now()) @map("created_at")
+  @@index([email, expiresAt])
+}
+
+model AuditEvent {
+  id             String       @id @default(uuid())
+  organizationId String       @map("organization_id")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  actorId        Int?         @map("actor_id")
+  actor          User?        @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  action         String
+  resourceType   String       @map("resource_type")
+  resourceId     String?      @map("resource_id")
+  metadata       Json         @default("{}")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  @@index([organizationId, createdAt])
+}
+
+model PublishApproval {
+  id             String       @id @default(uuid())
+  organizationId String       @map("organization_id")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  zapId          String       @map("zap_id")
+  zap            Zap          @relation(fields: [zapId], references: [id], onDelete: Cascade)
+  requestedById  Int          @map("requested_by_id")
+  requestedBy    User         @relation("ApprovalRequester", fields: [requestedById], references: [id], onDelete: Cascade)
+  reviewedById   Int?         @map("reviewed_by_id")
+  reviewedBy     User?        @relation("ApprovalReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  status         String       @default("PENDING")
+  note           String?
+  createdAt      DateTime     @default(now()) @map("created_at")
+  reviewedAt     DateTime?    @map("reviewed_at")
+  @@index([organizationId, status, createdAt])
 }
 
 model OAuthState {

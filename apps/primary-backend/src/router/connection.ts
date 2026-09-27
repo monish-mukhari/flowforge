@@ -257,10 +257,65 @@ router.get(
   authMiddleware,
   asyncRoute(async (req, res) => {
     const connections = await prisma.appConnection.findMany({
-      where: { userId: req.userId! },
+      where: {
+        OR: [
+          { userId: req.userId! },
+          { organization: { members: { some: { userId: req.userId! } } } },
+        ],
+      },
+      include: { organization: { select: { id: true, name: true } } },
       orderBy: { updatedAt: "desc" },
     });
-    res.json({ connections: connections.map(publicConnection) });
+    res.json({
+      connections: connections.map((connection) => ({
+        ...publicConnection(connection),
+        owned: connection.userId === req.userId!,
+      })),
+    });
+  }),
+);
+
+router.post(
+  "/:connectionId/share",
+  authMiddleware,
+  asyncRoute(async (req, res) => {
+    const { connectionId } = idSchema.parse(req.params);
+    const input = z
+      .object({ organizationId: z.string().uuid() })
+      .parse(req.body);
+    const connection = await prisma.appConnection.findFirst({
+      where: { id: connectionId, userId: req.userId! },
+    });
+    if (!connection)
+      throw new HttpError(404, "CONNECTION_NOT_FOUND", "Connection not found");
+    const member = await prisma.organizationMember.findUnique({
+      where: {
+        organizationId_userId: {
+          organizationId: input.organizationId,
+          userId: req.userId!,
+        },
+      },
+    });
+    if (!member || !["OWNER", "ADMIN"].includes(member.role))
+      throw new HttpError(
+        403,
+        "ROLE_REQUIRED",
+        "Owner or admin access is required to share connections",
+      );
+    const updated = await prisma.appConnection.update({
+      where: { id: connectionId },
+      data: { organizationId: input.organizationId },
+    });
+    await prisma.auditEvent.create({
+      data: {
+        organizationId: input.organizationId,
+        actorId: req.userId!,
+        action: "connection.shared",
+        resourceType: "connection",
+        resourceId: connectionId,
+      },
+    });
+    res.json({ connection: publicConnection(updated) });
   }),
 );
 

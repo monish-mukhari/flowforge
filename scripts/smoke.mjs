@@ -28,18 +28,27 @@ async function waitFor(getValue, description, timeoutMs = 60_000) {
   throw new Error(`Timed out waiting for ${description}`);
 }
 
-async function mailWithSubject(subject) {
+async function mailWithSubject(subject, address = email) {
   const response = await fetch(`${mailpitUrl}/api/v1/messages`);
   if (!response.ok) return undefined;
   const data = await response.json();
   const summary = data.messages?.find(
     (message) =>
       message.Subject === subject &&
-      message.To?.some((recipient) => recipient.Address === email),
+      message.To?.some((recipient) => recipient.Address === address),
   );
   if (!summary) return undefined;
   const detail = await fetch(`${mailpitUrl}/api/v1/message/${summary.ID}`);
   return detail.ok ? detail.json() : undefined;
+}
+
+function sessionCookies(response) {
+  const setCookie = response.headers.get("set-cookie") || "";
+  return ["flowforge_access", "flowforge_refresh"]
+    .map((name) => setCookie.match(new RegExp(`${name}=([^;]+)`)))
+    .filter(Boolean)
+    .map((match) => `${match[0].split(";")[0]}`)
+    .join("; ");
 }
 
 await waitFor(
@@ -83,12 +92,7 @@ const login = await request(`${apiUrl}/api/v1/user/signin`, {
   headers: { "content-type": "application/json" },
   body: JSON.stringify({ username: email, password }),
 });
-const setCookie = login.response.headers.get("set-cookie") || "";
-const cookies = ["flowforge_access", "flowforge_refresh"]
-  .map((name) => setCookie.match(new RegExp(`${name}=([^;]+)`)))
-  .filter(Boolean)
-  .map((match) => `${match[0].split(";")[0]}`)
-  .join("; ");
+const cookies = sessionCookies(login.response);
 if (!cookies.includes("flowforge_access"))
   throw new Error("Login did not issue secure session cookies");
 
@@ -310,8 +314,122 @@ await request(`${apiUrl}/api/v1/zap/${workflow.id}/resume`, {
   method: "POST",
   headers: { cookie: cookies },
 });
+
+const organizations = await request(`${apiUrl}/api/v1/organizations`, {
+  headers: { cookie: cookies },
+});
+const workspace = organizations.body.organizations.find(
+  (item) => item.role === "OWNER",
+);
+if (!workspace)
+  throw new Error("New account did not receive a personal workspace");
+await request(`${apiUrl}/api/v1/zap/${workflow.id}/share`, {
+  method: "POST",
+  headers: { "content-type": "application/json", cookie: cookies },
+  body: JSON.stringify({ organizationId: workspace.id }),
+});
+await request(
+  `${apiUrl}/api/v1/connections/${smtpConnection.body.connection.id}/share`,
+  {
+    method: "POST",
+    headers: { "content-type": "application/json", cookie: cookies },
+    body: JSON.stringify({ organizationId: workspace.id }),
+  },
+);
+const editorEmail = `editor-${Date.now()}@example.com`;
+const invitation = await request(
+  `${apiUrl}/api/v1/organizations/${workspace.id}/invitations`,
+  {
+    method: "POST",
+    headers: { "content-type": "application/json", cookie: cookies },
+    body: JSON.stringify({ email: editorEmail, role: "EDITOR" }),
+  },
+);
+await request(`${apiUrl}/api/v1/user/signup`, {
+  method: "POST",
+  headers: { "content-type": "application/json" },
+  body: JSON.stringify({
+    name: "Workspace Editor",
+    username: editorEmail,
+    password,
+  }),
+});
+const editorVerificationMail = await waitFor(
+  () => mailWithSubject("Verify your FlowForge account", editorEmail),
+  "editor verification email",
+);
+const editorVerificationToken = editorVerificationMail.Text.match(
+  /verificationToken=([^\s]+)/,
+)?.[1];
+if (!editorVerificationToken)
+  throw new Error("Editor verification token was not present in the email");
+await request(`${apiUrl}/api/v1/user/verify-email`, {
+  method: "POST",
+  headers: { "content-type": "application/json" },
+  body: JSON.stringify({ token: decodeURIComponent(editorVerificationToken) }),
+});
+const editorLogin = await request(`${apiUrl}/api/v1/user/signin`, {
+  method: "POST",
+  headers: { "content-type": "application/json" },
+  body: JSON.stringify({ username: editorEmail, password }),
+});
+const editorCookies = sessionCookies(editorLogin.response);
+await request(
+  `${apiUrl}/api/v1/organizations/invitations/${invitation.body.token}/accept`,
+  { method: "POST", headers: { cookie: editorCookies } },
+);
+const editorWorkflows = await request(`${apiUrl}/api/v1/zap`, {
+  headers: { cookie: editorCookies },
+});
+const sharedWorkflow = editorWorkflows.body.zaps.find(
+  (item) => item.id === workflow.id,
+);
+if (!sharedWorkflow || sharedWorkflow.accessRole !== "EDITOR")
+  throw new Error("Invited editor could not see the shared workflow");
+if (sharedWorkflow.webhookSecret)
+  throw new Error("Shared workflow exposed its signing secret to an editor");
+const editorConnections = await request(`${apiUrl}/api/v1/connections`, {
+  headers: { cookie: editorCookies },
+});
+if (
+  !editorConnections.body.connections.some(
+    (item) =>
+      item.id === smtpConnection.body.connection.id && item.owned === false,
+  )
+)
+  throw new Error("Invited editor could not see the shared connection");
+const forbiddenDelete = await fetch(`${apiUrl}/api/v1/zap/${workflow.id}`, {
+  method: "DELETE",
+  headers: { cookie: editorCookies },
+});
+if (forbiddenDelete.status !== 403)
+  throw new Error("Editor was allowed to delete a shared workflow");
+const approval = await request(
+  `${apiUrl}/api/v1/organizations/${workspace.id}/approvals`,
+  {
+    method: "POST",
+    headers: { "content-type": "application/json", cookie: editorCookies },
+    body: JSON.stringify({ zapId: workflow.id }),
+  },
+);
+await request(
+  `${apiUrl}/api/v1/organizations/${workspace.id}/approvals/${approval.body.approval.id}/review`,
+  {
+    method: "POST",
+    headers: { "content-type": "application/json", cookie: cookies },
+    body: JSON.stringify({ status: "APPROVED" }),
+  },
+);
+await request(`${apiUrl}/api/v1/zap/${workflow.id}/publish`, {
+  method: "POST",
+  headers: { cookie: editorCookies },
+});
+await request(`${apiUrl}/api/v1/user/logout`, {
+  method: "POST",
+  headers: { cookie: editorCookies },
+});
 await request(`${apiUrl}/api/v1/user/logout`, {
   method: "POST",
   headers: { cookie: cookies },
 });
-console.log(`Phase 5 smoke test passed for ${workflow.id}`);
+console.log(`Production and workspace smoke test passed for ${workflow.id}`);

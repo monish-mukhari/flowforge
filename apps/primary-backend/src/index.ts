@@ -15,6 +15,7 @@ import { logger } from "./logger";
 import { openApiDocument } from "./openapi";
 import { connectionRouter } from "./router/connection";
 import prisma from "@repo/db/client";
+import { organizationRouter } from "./router/organization";
 
 export const app = express();
 app.disable("x-powered-by");
@@ -87,6 +88,7 @@ app.use("/api/v1/action", actionRouter);
 
 app.use("/api/v1/trigger", triggerRouter);
 app.use("/api/v1/connections", connectionRouter);
+app.use("/api/v1/organizations", organizationRouter);
 app.use(notFoundHandler);
 app.use(errorHandler);
 

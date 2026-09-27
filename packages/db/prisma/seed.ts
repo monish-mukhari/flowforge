@@ -96,6 +96,14 @@ async function seedDB() {
         update: { name, description, image: key, authType, active: true },
       });
     }
+    const users = await prisma.user.findMany({ select: { id: true, name: true } });
+    for (const user of users) {
+      const existingMembership = await prisma.organizationMember.findFirst({ where: { userId: user.id } });
+      if (existingMembership) continue;
+      const slug = `${user.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}-${user.id}`;
+      const organization = await prisma.organization.create({ data: { name: `${user.name}'s workspace`, slug, ownerId: user.id } });
+      await prisma.organizationMember.create({ data: { organizationId: organization.id, userId: user.id, role: "OWNER" } });
+    }
   } catch (error) {
     console.error("Error seeding content:", error);
     throw error;

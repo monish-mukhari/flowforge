@@ -24,7 +24,14 @@ export default function Signup() {
         username: email,
         password,
       });
-      router.push("/login?created=1");
+      const requested = new URLSearchParams(window.location.search).get("next");
+      const next =
+        requested?.startsWith("/") && !requested.startsWith("//")
+          ? requested
+          : "";
+      router.push(
+        `/login?created=1${next ? `&next=${encodeURIComponent(next)}` : ""}`,
+      );
     } catch (caught) {
       setError(getErrorMessage(caught));
     } finally {

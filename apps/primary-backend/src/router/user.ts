@@ -23,6 +23,7 @@ import { sendPasswordResetEmail, sendVerificationEmail } from "../mail";
 import { config } from "../config";
 import { Connection, PublicKey } from "@solana/web3.js";
 import { createEncryptedWallet } from "../solana-wallet";
+import { randomBytes } from "node:crypto";
 
 const router = Router();
 
@@ -62,6 +63,13 @@ router.post(
             emailVerificationTokens: { create: tokenData },
           },
         });
+    if (!existing) {
+      const slug = `${data.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}-${randomBytes(3).toString("hex")}`;
+      await prisma.$transaction(async (tx) => {
+        const organization = await tx.organization.create({ data: { name: `${data.name}'s workspace`, slug, ownerId: user.id } });
+        await tx.organizationMember.create({ data: { organizationId: organization.id, userId: user.id, role: "OWNER" } });
+      });
+    }
     await sendVerificationEmail(user.email, token);
     return res
       .status(201)

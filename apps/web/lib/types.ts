@@ -30,6 +30,9 @@ export type AppConnection = {
   lastError: string | null;
   createdAt: string;
   updatedAt: string;
+  organizationId?: string | null;
+  organization?: { id: string; name: string } | null;
+  owned?: boolean;
 };
 
 export type ZapAction = {
@@ -66,6 +69,9 @@ export type Zap = {
     type: AppOption;
   } | null;
   _count?: { versions: number };
+  organizationId?: string | null;
+  accessRole?: "OWNER" | "ADMIN" | "EDITOR" | "VIEWER";
+  organization?: { id: string; name: string } | null;
 };
 
 export type RunAttempt = {

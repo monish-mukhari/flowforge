@@ -23,6 +23,7 @@ function NavIcon({
     | "history"
     | "templates"
     | "crypto"
+    | "workspace"
     | "menu"
     | "search"
     | "sun"
@@ -67,6 +68,8 @@ function NavIcon({
     return <svg {...common}><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v16H6.5A2.5 2.5 0 0 0 4 21V5.5Z" /><path d="M4 5.5V19M8 7h8M8 11h8" /></svg>;
   if (name === "crypto")
     return <svg {...common}><circle cx="12" cy="12" r="8.5" /><path d="M9 8.5h4.2a2 2 0 0 1 0 4H9m0 0h4.8a2 2 0 0 1 0 4H9m0-9v9m-1.5-9H14m-6.5 9H14" /></svg>;
+  if (name === "workspace")
+    return <svg {...common}><circle cx="9" cy="8" r="3" /><circle cx="17" cy="10" r="2.3" /><path d="M3.5 19a5.5 5.5 0 0 1 11 0M15 16.5a4.2 4.2 0 0 1 5.5 2.5" /></svg>;
   if (name === "menu")
     return (
       <svg {...common}>
@@ -263,6 +266,9 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           </Link>
           <Link href="/crypto" className={`flex items-center gap-3 rounded-lg py-2.5 ${sidebarCollapsed ? "justify-center px-0" : "px-3"} ${pathname === "/crypto" ? "bg-[#f1eeea]" : "hover:bg-[#f7f5f2]"}`} title={sidebarCollapsed ? "Crypto settings" : undefined}>
             <NavIcon name="crypto" />{!sidebarCollapsed && "Crypto settings"}
+          </Link>
+          <Link href="/workspace" className={`flex items-center gap-3 rounded-lg py-2.5 ${sidebarCollapsed ? "justify-center px-0" : "px-3"} ${pathname === "/workspace" ? "bg-[#f1eeea]" : "hover:bg-[#f7f5f2]"}`} title={sidebarCollapsed ? "Workspace" : undefined}>
+            <NavIcon name="workspace" />{!sidebarCollapsed && "Workspace"}
           </Link>
         </nav>
         <div

@@ -24,6 +24,7 @@ const router = Router();
 const workflowInclude = {
   actions: { include: { type: true }, orderBy: { sortingOrder: "asc" } },
   trigger: { include: { type: true } },
+  organization: { select: { id: true, name: true } },
   _count: { select: { versions: true } },
 } satisfies Prisma.ZapInclude;
 
@@ -84,7 +85,7 @@ function ownedRunWhere(
   const createdAt = runDateFilter(query);
   return {
     zap: {
-      userId,
+      OR: [{ userId }, { organization: { members: { some: { userId } } } }],
       ...(query.workflowId ? { id: query.workflowId } : {}),
     },
     ...(query.status ? { status: query.status } : {}),
@@ -134,9 +135,9 @@ async function ensureAvailableConnectors(
   if (requestedConnections.length) {
     const connections = await prisma.appConnection.findMany({
       where: {
-        userId,
         id: { in: requestedConnections.map((connection) => connection.id) },
         status: { not: "REVOKED" },
+        OR: [{ userId }, { organization: { members: { some: { userId } } } }],
       },
       select: { id: true, connectorKey: true },
     });
@@ -159,14 +160,66 @@ async function ensureAvailableConnectors(
   }
 }
 
-async function findOwnedWorkflow(userId: number, zapId: string) {
-  const workflow = await prisma.zap.findFirst({
-    where: { id: zapId, userId },
+type AccessRole = "OWNER" | "ADMIN" | "EDITOR" | "VIEWER";
+const roleRank: Record<AccessRole, number> = {
+  VIEWER: 0,
+  EDITOR: 1,
+  ADMIN: 2,
+  OWNER: 3,
+};
+
+async function findOwnedWorkflow(
+  userId: number,
+  zapId: string,
+  minimum: AccessRole = "EDITOR",
+) {
+  const workflow = await prisma.zap.findUnique({
+    where: { id: zapId },
     include: workflowInclude,
   });
   if (!workflow)
     throw new HttpError(404, "WORKFLOW_NOT_FOUND", "Workflow not found");
+  let accessRole: AccessRole | null =
+    workflow.userId === userId ? "OWNER" : null;
+  if (!accessRole && workflow.organizationId) {
+    const member = await prisma.organizationMember.findUnique({
+      where: {
+        organizationId_userId: {
+          organizationId: workflow.organizationId,
+          userId,
+        },
+      },
+      select: { role: true },
+    });
+    accessRole = member?.role ?? null;
+  }
+  if (!accessRole)
+    throw new HttpError(404, "WORKFLOW_NOT_FOUND", "Workflow not found");
+  if (roleRank[accessRole] < roleRank[minimum])
+    throw new HttpError(
+      403,
+      "WORKFLOW_ROLE_REQUIRED",
+      `${minimum.toLowerCase()} access is required for this workflow`,
+    );
   return workflow;
+}
+
+async function workflowAccessRole(
+  userId: number,
+  workflow: { userId: number; organizationId: string | null },
+): Promise<AccessRole> {
+  if (workflow.userId === userId) return "OWNER";
+  if (!workflow.organizationId) return "VIEWER";
+  const member = await prisma.organizationMember.findUnique({
+    where: {
+      organizationId_userId: {
+        organizationId: workflow.organizationId,
+        userId,
+      },
+    },
+    select: { role: true },
+  });
+  return member?.role ?? "VIEWER";
 }
 
 router.post(
@@ -224,23 +277,34 @@ router.get(
     const userId = req.userId!;
     const query = ZapListQuerySchema.parse(req.query);
     const where: Prisma.ZapWhereInput = {
-      userId,
-      ...(query.status ? { status: query.status } : {}),
-      ...(query.search
-        ? {
-            OR: [
-              { name: { contains: query.search, mode: "insensitive" } },
+      AND: [
+        {
+          OR: [{ userId }, { organization: { members: { some: { userId } } } }],
+        },
+        ...(query.search
+          ? [
               {
-                description: {
-                  contains: query.search,
-                  mode: "insensitive",
-                },
+                OR: [
+                  {
+                    name: {
+                      contains: query.search,
+                      mode: "insensitive" as const,
+                    },
+                  },
+                  {
+                    description: {
+                      contains: query.search,
+                      mode: "insensitive" as const,
+                    },
+                  },
+                ],
               },
-            ],
-          }
-        : {}),
+            ]
+          : []),
+      ],
+      ...(query.status ? { status: query.status } : {}),
     };
-    const [zaps, total] = await Promise.all([
+    const [zaps, total, memberships] = await Promise.all([
       prisma.zap.findMany({
         where,
         include: workflowInclude,
@@ -249,9 +313,34 @@ router.get(
         take: query.pageSize,
       }),
       prisma.zap.count({ where }),
+      prisma.organizationMember.findMany({
+        where: { userId },
+        select: { organizationId: true, role: true },
+      }),
     ]);
+    const roles = new Map(
+      memberships.map((membership) => [
+        membership.organizationId,
+        membership.role,
+      ]),
+    );
     return res.json({
-      zaps,
+      zaps: zaps.map((zap) => {
+        const accessRole =
+          zap.userId === userId
+            ? "OWNER"
+            : zap.organizationId
+              ? roles.get(zap.organizationId)
+              : "VIEWER";
+        return {
+          ...zap,
+          webhookSecret:
+            roleRank[accessRole ?? "VIEWER"] >= roleRank.ADMIN
+              ? zap.webhookSecret
+              : "",
+          accessRole,
+        };
+      }),
       pagination: {
         page: query.page,
         pageSize: query.pageSize,
@@ -267,8 +356,22 @@ router.get(
   authMiddleware,
   asyncRoute(async (req, res) => {
     const { zapId } = ZapIdSchema.parse(req.params);
-    const workflow = await findOwnedWorkflow(req.userId!, zapId);
-    res.json({ version: 1, workflow: { name: workflow.name, description: workflow.description, trigger: { id: workflow.trigger?.triggerId, metadata: workflow.trigger?.metadata ?? {} }, actions: workflow.actions.map((action) => ({ id: action.actionId, metadata: action.metadata })) } });
+    const workflow = await findOwnedWorkflow(req.userId!, zapId, "VIEWER");
+    res.json({
+      version: 1,
+      workflow: {
+        name: workflow.name,
+        description: workflow.description,
+        trigger: {
+          id: workflow.trigger?.triggerId,
+          metadata: workflow.trigger?.metadata ?? {},
+        },
+        actions: workflow.actions.map((action) => ({
+          id: action.actionId,
+          metadata: action.metadata,
+        })),
+      },
+    });
   }),
 );
 
@@ -276,13 +379,76 @@ router.post(
   "/import",
   authMiddleware,
   asyncRoute(async (req, res) => {
-    const input = z.object({ version: z.number().int().default(1), workflow: z.object({ name: z.string().trim().min(1).max(120), description: z.string().max(1000).nullable().optional(), trigger: z.object({ id: z.string().min(1), metadata: z.record(z.string(), z.unknown()).default({}) }), actions: z.array(z.object({ id: z.string().min(1), metadata: z.record(z.string(), z.unknown()).default({}) })).min(1).max(25) }) }).parse(req.body);
-    const createInput = { name: input.workflow.name, description: input.workflow.description, availableTriggerId: input.workflow.trigger.id, triggerMetadata: input.workflow.trigger.metadata, actions: input.workflow.actions.map((action) => ({ availableActionId: action.id, actionMetadata: action.metadata })) };
-    await ensureAvailableConnectors(req.userId!, createInput.availableTriggerId, createInput.actions);
+    const input = z
+      .object({
+        version: z.number().int().default(1),
+        workflow: z.object({
+          name: z.string().trim().min(1).max(120),
+          description: z.string().max(1000).nullable().optional(),
+          trigger: z.object({
+            id: z.string().min(1),
+            metadata: z.record(z.string(), z.unknown()).default({}),
+          }),
+          actions: z
+            .array(
+              z.object({
+                id: z.string().min(1),
+                metadata: z.record(z.string(), z.unknown()).default({}),
+              }),
+            )
+            .min(1)
+            .max(25),
+        }),
+      })
+      .parse(req.body);
+    const createInput = {
+      name: input.workflow.name,
+      description: input.workflow.description,
+      availableTriggerId: input.workflow.trigger.id,
+      triggerMetadata: input.workflow.trigger.metadata,
+      actions: input.workflow.actions.map((action) => ({
+        availableActionId: action.id,
+        actionMetadata: action.metadata,
+      })),
+    };
+    await ensureAvailableConnectors(
+      req.userId!,
+      createInput.availableTriggerId,
+      createInput.actions,
+    );
     const workflow = await prisma.$transaction(async (tx) => {
-      const zap = await tx.zap.create({ data: { userId: req.userId!, name: createInput.name, description: createInput.description, triggerId: "", webhookSecret: randomBytes(32).toString("base64url"), actions: { create: createInput.actions.map((action, sortingOrder) => ({ actionId: action.availableActionId, sortingOrder, metadata: action.actionMetadata as Prisma.InputJsonValue })) } } });
-      await tx.trigger.create({ data: { zapId: zap.id, triggerId: createInput.availableTriggerId, metadata: createInput.triggerMetadata as Prisma.InputJsonValue } });
-      return tx.zap.update({ where: { id: zap.id }, data: { triggerId: (await tx.trigger.findUniqueOrThrow({ where: { zapId: zap.id } })).id }, include: workflowInclude });
+      const zap = await tx.zap.create({
+        data: {
+          userId: req.userId!,
+          name: createInput.name,
+          description: createInput.description,
+          triggerId: "",
+          webhookSecret: randomBytes(32).toString("base64url"),
+          actions: {
+            create: createInput.actions.map((action, sortingOrder) => ({
+              actionId: action.availableActionId,
+              sortingOrder,
+              metadata: action.actionMetadata as Prisma.InputJsonValue,
+            })),
+          },
+        },
+      });
+      await tx.trigger.create({
+        data: {
+          zapId: zap.id,
+          triggerId: createInput.availableTriggerId,
+          metadata: createInput.triggerMetadata as Prisma.InputJsonValue,
+        },
+      });
+      return tx.zap.update({
+        where: { id: zap.id },
+        data: {
+          triggerId: (
+            await tx.trigger.findUniqueOrThrow({ where: { zapId: zap.id } })
+          ).id,
+        },
+        include: workflowInclude,
+      });
     });
     res.status(201).json({ zapId: workflow.id, zap: workflow });
   }),
@@ -364,12 +530,71 @@ router.patch(
 );
 
 router.post(
+  "/:zapId/share",
+  authMiddleware,
+  asyncRoute(async (req, res) => {
+    const { zapId } = ZapIdSchema.parse(req.params);
+    const input = z
+      .object({ organizationId: z.string().uuid() })
+      .parse(req.body);
+    const workflow = await findOwnedWorkflow(req.userId!, zapId, "ADMIN");
+    const member = await prisma.organizationMember.findUnique({
+      where: {
+        organizationId_userId: {
+          organizationId: input.organizationId,
+          userId: req.userId!,
+        },
+      },
+    });
+    if (!member || !["OWNER", "ADMIN", "EDITOR"].includes(member.role))
+      throw new HttpError(
+        403,
+        "ROLE_REQUIRED",
+        "Editor access is required to share workflows",
+      );
+    const updated = await prisma.zap.update({
+      where: { id: zapId },
+      data: { organizationId: input.organizationId },
+      include: workflowInclude,
+    });
+    await prisma.auditEvent.create({
+      data: {
+        organizationId: input.organizationId,
+        actorId: req.userId!,
+        action: "workflow.shared",
+        resourceType: "zap",
+        resourceId: zapId,
+      },
+    });
+    res.json({ zap: updated });
+  }),
+);
+
+router.post(
   "/:zapId/publish",
   authMiddleware,
   asyncRoute(async (req, res) => {
     const userId = req.userId!;
     const { zapId } = ZapIdSchema.parse(req.params);
     const workflow = await findOwnedWorkflow(userId, zapId);
+    const accessRole = await workflowAccessRole(userId, workflow);
+    if (workflow.organizationId && accessRole === "EDITOR") {
+      const approval = await prisma.publishApproval.findFirst({
+        where: {
+          organizationId: workflow.organizationId,
+          zapId,
+          status: "APPROVED",
+          createdAt: { gte: workflow.updatedAt },
+        },
+        orderBy: { reviewedAt: "desc" },
+      });
+      if (!approval)
+        throw new HttpError(
+          409,
+          "PUBLISH_APPROVAL_REQUIRED",
+          "An owner or admin must approve this workflow before an editor can publish it",
+        );
+    }
     if (workflow.status === "ARCHIVED")
       throw new HttpError(
         409,
@@ -415,6 +640,17 @@ router.post(
       },
       { isolationLevel: "Serializable" },
     );
+    if (workflow.organizationId)
+      await prisma.auditEvent.create({
+        data: {
+          organizationId: workflow.organizationId,
+          actorId: userId,
+          action: "workflow.published",
+          resourceType: "zap",
+          resourceId: zapId,
+          metadata: { version: result.version.version },
+        },
+      });
     return res.status(201).json(result);
   }),
 );
@@ -469,7 +705,7 @@ router.post(
   asyncRoute(async (req, res) => {
     const userId = req.userId!;
     const { zapId } = ZapIdSchema.parse(req.params);
-    await findOwnedWorkflow(userId, zapId);
+    await findOwnedWorkflow(userId, zapId, "ADMIN");
     const zap = await prisma.zap.update({
       where: { id: zapId },
       data: { status: "ARCHIVED", archivedAt: new Date(), pausedAt: null },
@@ -485,7 +721,7 @@ router.post(
   asyncRoute(async (req, res) => {
     const userId = req.userId!;
     const { zapId } = ZapIdSchema.parse(req.params);
-    const source = await findOwnedWorkflow(userId, zapId);
+    const source = await findOwnedWorkflow(userId, zapId, "VIEWER");
     if (!source.trigger)
       throw new HttpError(
         409,
@@ -565,7 +801,7 @@ router.get(
   asyncRoute(async (req, res) => {
     const userId = req.userId!;
     const { zapId } = ZapIdSchema.parse(req.params);
-    await findOwnedWorkflow(userId, zapId);
+    await findOwnedWorkflow(userId, zapId, "VIEWER");
     const versions = await prisma.workflowVersion.findMany({
       where: { zapId },
       orderBy: { version: "desc" },
@@ -581,7 +817,7 @@ router.get(
     const userId = req.userId!;
     const { zapId } = ZapIdSchema.parse(req.params);
     const query = runListQuerySchema.parse(req.query);
-    await findOwnedWorkflow(userId, zapId);
+    await findOwnedWorkflow(userId, zapId, "VIEWER");
     const createdAt = runDateFilter(query);
     const summaryWhere: Prisma.ZapRunWhereInput = {
       zapId,
@@ -782,7 +1018,7 @@ router.get(
   asyncRoute(async (req, res) => {
     const userId = req.userId!;
     const { zapId, runId } = runParamsSchema.parse(req.params);
-    await findOwnedWorkflow(userId, zapId);
+    await findOwnedWorkflow(userId, zapId, "VIEWER");
     const run = await prisma.zapRun.findFirst({
       where: { id: runId, zapId },
       include: {
@@ -873,7 +1109,7 @@ router.get(
   asyncRoute(async (req, res) => {
     const userId = req.userId!;
     const { zapId } = ZapIdSchema.parse(req.params);
-    await findOwnedWorkflow(userId, zapId);
+    await findOwnedWorkflow(userId, zapId, "VIEWER");
     const capture = await prisma.testTriggerCapture.findFirst({
       where: { zapId, expiresAt: { gt: new Date() } },
       orderBy: { createdAt: "desc" },
@@ -888,7 +1124,7 @@ router.post(
   asyncRoute(async (req, res) => {
     const userId = req.userId!;
     const { zapId } = ZapIdSchema.parse(req.params);
-    await findOwnedWorkflow(userId, zapId);
+    await findOwnedWorkflow(userId, zapId, "ADMIN");
     const zap = await prisma.zap.update({
       where: { id: zapId },
       data: { webhookSecret: randomBytes(32).toString("base64url") },
@@ -904,7 +1140,7 @@ router.delete(
   asyncRoute(async (req, res) => {
     const userId = req.userId!;
     const { zapId } = ZapIdSchema.parse(req.params);
-    await findOwnedWorkflow(userId, zapId);
+    await findOwnedWorkflow(userId, zapId, "ADMIN");
     await prisma.zap.delete({ where: { id: zapId } });
     return res.status(204).send();
   }),
@@ -916,8 +1152,16 @@ router.get(
   asyncRoute(async (req, res) => {
     const userId = req.userId!;
     const { zapId } = ZapIdSchema.parse(req.params);
-    const zap = await findOwnedWorkflow(userId, zapId);
-    return res.json({ zap });
+    const zap = await findOwnedWorkflow(userId, zapId, "VIEWER");
+    const accessRole = await workflowAccessRole(userId, zap);
+    return res.json({
+      zap: {
+        ...zap,
+        webhookSecret:
+          roleRank[accessRole] >= roleRank.ADMIN ? zap.webhookSecret : "",
+        accessRole,
+      },
+    });
   }),
 );
 

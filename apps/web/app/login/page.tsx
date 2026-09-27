@@ -30,7 +30,12 @@ export default function Login() {
     setLoading(true);
     try {
       await api.post("/api/v1/user/signin", { username: email, password });
-      router.push("/dashboard");
+      const requested = new URLSearchParams(window.location.search).get("next");
+      const destination =
+        requested?.startsWith("/") && !requested.startsWith("//")
+          ? requested
+          : "/dashboard";
+      router.push(destination);
     } catch (caught) {
       setError(getErrorMessage(caught));
     } finally {

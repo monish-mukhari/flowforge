@@ -15,14 +15,20 @@ function ConnectionsPageContent() {
   const [form, setForm] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
+  const [organizations, setOrganizations] = useState<
+    Array<{ id: string; name: string; role: string }>
+  >([]);
+  const [shareTarget, setShareTarget] = useState<Record<string, string>>({});
 
   async function load() {
-    const [saved, definitions] = await Promise.all([
+    const [saved, definitions, workspaceResponse] = await Promise.all([
       api.get("/api/v1/connections"),
       api.get("/api/v1/connections/catalog"),
+      api.get("/api/v1/organizations"),
     ]);
     setConnections(saved.data.connections);
     setCatalog(definitions.data.connectors);
+    setOrganizations(workspaceResponse.data.organizations);
   }
 
   useEffect(() => {
@@ -104,6 +110,20 @@ function ConnectionsPageContent() {
     setBusy(id);
     try {
       await api.delete(`/api/v1/connections/${id}`);
+      await load();
+    } catch (caught) {
+      setError(getErrorMessage(caught));
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function share(id: string) {
+    const organizationId = shareTarget[id];
+    if (!organizationId) return;
+    setBusy(id);
+    try {
+      await api.post(`/api/v1/connections/${id}/share`, { organizationId });
       await load();
     } catch (caught) {
       setError(getErrorMessage(caught));
@@ -223,20 +243,78 @@ function ConnectionsPageContent() {
                   >
                     {connection.status}
                   </span>
-                  <button
-                    disabled={busy === connection.id}
-                    onClick={() => test(connection.id)}
-                    className="rounded-lg border px-3 py-2 text-xs font-bold"
-                  >
-                    Test
-                  </button>
-                  <button
-                    disabled={busy === connection.id}
-                    onClick={() => remove(connection.id)}
-                    className="rounded-lg border border-red-200 px-3 py-2 text-xs font-bold text-red-700"
-                  >
-                    Remove
-                  </button>
+                  {!connection.owned && (
+                    <span className="rounded-full bg-[#eee9ff] px-2 py-1 text-[10px] font-black text-[#503eb6]">
+                      Shared by {connection.organization?.name ?? "workspace"}
+                    </span>
+                  )}
+                  {connection.owned &&
+                    organizations.some(
+                      (organization) =>
+                        organization.role === "OWNER" ||
+                        organization.role === "ADMIN",
+                    ) && (
+                      <div className="flex items-center gap-1 rounded-lg border border-[#d8d1ca] px-2 py-1">
+                        <select
+                          value={
+                            shareTarget[connection.id] ??
+                            connection.organizationId ??
+                            ""
+                          }
+                          onChange={(event) =>
+                            setShareTarget((current) => ({
+                              ...current,
+                              [connection.id]: event.target.value,
+                            }))
+                          }
+                          className="max-w-32 bg-transparent text-xs font-bold outline-none"
+                        >
+                          <option value="">Share…</option>
+                          {organizations
+                            .filter(
+                              (organization) =>
+                                organization.role === "OWNER" ||
+                                organization.role === "ADMIN",
+                            )
+                            .map((organization) => (
+                              <option
+                                key={organization.id}
+                                value={organization.id}
+                              >
+                                {organization.name}
+                              </option>
+                            ))}
+                        </select>
+                        <button
+                          onClick={() => void share(connection.id)}
+                          disabled={
+                            busy === connection.id ||
+                            !shareTarget[connection.id]
+                          }
+                          className="rounded bg-[#503eb6] px-2 py-1 text-[10px] font-bold text-white disabled:opacity-50"
+                        >
+                          Share
+                        </button>
+                      </div>
+                    )}
+                  {connection.owned && (
+                    <>
+                      <button
+                        disabled={busy === connection.id}
+                        onClick={() => test(connection.id)}
+                        className="rounded-lg border px-3 py-2 text-xs font-bold"
+                      >
+                        Test
+                      </button>
+                      <button
+                        disabled={busy === connection.id}
+                        onClick={() => remove(connection.id)}
+                        className="rounded-lg border border-red-200 px-3 py-2 text-xs font-bold text-red-700"
+                      >
+                        Remove
+                      </button>
+                    </>
+                  )}
                 </article>
               ))}
             </div>

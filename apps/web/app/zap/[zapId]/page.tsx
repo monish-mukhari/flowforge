@@ -27,6 +27,11 @@ export default function ZapDetails() {
   const [runSummary, setRunSummary] = useState<Record<string, number>>({});
   const [expandedRun, setExpandedRun] = useState<string | null>(null);
   const [runFilter, setRunFilter] = useState("");
+  const [organizations, setOrganizations] = useState<
+    Array<{ id: string; name: string; role: string }>
+  >([]);
+  const [shareOrganizationId, setShareOrganizationId] = useState("");
+  const [shareMenuOpen, setShareMenuOpen] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -38,6 +43,19 @@ export default function ZapDetails() {
       })
       .catch((caught) => setError(getErrorMessage(caught)));
   }, [router, zapId]);
+
+  useEffect(() => {
+    api
+      .get("/api/v1/organizations")
+      .then((response) =>
+        setOrganizations(
+          response.data.organizations.filter(
+            (organization: { role: string }) => organization.role !== "VIEWER",
+          ),
+        ),
+      )
+      .catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     if (!zap) return;
@@ -71,6 +89,13 @@ export default function ZapDetails() {
   }, [runFilter, zap, zapId]);
 
   const hookUrl = zap ? `${HOOKS_URL}/${zap.id}/${zap.webhookToken}` : "";
+  const canEdit =
+    !zap?.accessRole || ["OWNER", "ADMIN", "EDITOR"].includes(zap.accessRole);
+  const canManage =
+    !zap?.accessRole || ["OWNER", "ADMIN"].includes(zap.accessRole);
+  const selectedShareOrganization = organizations.find(
+    (organization) => organization.id === shareOrganizationId,
+  );
   const curl = `curl -X POST "${hookUrl}" -H "Content-Type: application/json" -d '{"customer":{"name":"Ada","email":"ada@example.com"},"payment":{"amount":"0.01"}}'`;
   async function copy(value: string, key: string) {
     await navigator.clipboard.writeText(value);
@@ -98,6 +123,22 @@ export default function ZapDetails() {
       router.push(`/zap/${response.data.zapId}`);
     } catch (caught) {
       setError(getErrorMessage(caught));
+      setBusyAction("");
+    }
+  }
+
+  async function shareWorkflow() {
+    if (!shareOrganizationId) return;
+    setBusyAction("share");
+    try {
+      const response = await api.post(`/api/v1/zap/${zapId}/share`, {
+        organizationId: shareOrganizationId,
+      });
+      setZap(response.data.zap);
+      setShareOrganizationId("");
+    } catch (caught) {
+      setError(getErrorMessage(caught));
+    } finally {
       setBusyAction("");
     }
   }
@@ -236,6 +277,124 @@ export default function ZapDetails() {
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
+                {!editing && canManage && organizations.length > 0 && (
+                  <div
+                    className="relative flex items-center gap-2 rounded-xl border border-[#d8d1ca] bg-white p-1.5 shadow-sm transition focus-within:border-[#8d7ce0] focus-within:ring-4 focus-within:ring-[#eee9ff]"
+                    onBlur={(event) => {
+                      if (!event.currentTarget.contains(event.relatedTarget))
+                        setShareMenuOpen(false);
+                    }}
+                  >
+                    <button
+                      type="button"
+                      aria-haspopup="listbox"
+                      aria-expanded={shareMenuOpen}
+                      onClick={() => setShareMenuOpen((open) => !open)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Escape") setShareMenuOpen(false);
+                      }}
+                      className="flex min-w-48 items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition hover:bg-[#f7f5f2]"
+                    >
+                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#eee9ff] text-[#503eb6]">
+                        <svg
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.8"
+                          className="h-4 w-4"
+                          aria-hidden="true"
+                        >
+                          <path d="M4 20V7l8-4 8 4v13M8 20v-5h8v5M8 9h.01M12 9h.01M16 9h.01M8 12h.01M12 12h.01M16 12h.01" />
+                        </svg>
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-[10px] font-bold uppercase tracking-[0.1em] text-[#8d8580]">
+                          Workspace
+                        </span>
+                        <span className="block max-w-36 truncate text-xs font-bold text-[#2d2525]">
+                          {selectedShareOrganization?.name ??
+                            "Choose workspace"}
+                        </span>
+                      </span>
+                      <svg
+                        viewBox="0 0 20 20"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        className={`h-4 w-4 shrink-0 text-[#8d8580] transition ${shareMenuOpen ? "rotate-180" : ""}`}
+                        aria-hidden="true"
+                      >
+                        <path d="m5 7.5 5 5 5-5" />
+                      </svg>
+                    </button>
+                    {shareMenuOpen && (
+                      <div
+                        role="listbox"
+                        aria-label="Choose a workspace"
+                        className="absolute left-0 top-[calc(100%+8px)] z-40 w-72 overflow-hidden rounded-2xl border border-[#ddd6cf] bg-white p-2 shadow-[0_18px_45px_rgba(45,37,37,0.18)]"
+                      >
+                        <div className="px-3 pb-2 pt-1">
+                          <p className="text-xs font-black text-[#2d2525]">
+                            Share to a workspace
+                          </p>
+                          <p className="mt-0.5 text-[11px] leading-4 text-[#8d8580]">
+                            Members will receive access based on their role.
+                          </p>
+                        </div>
+                        <div className="max-h-56 space-y-1 overflow-y-auto">
+                          {organizations.map((organization) => {
+                            const selected =
+                              organization.id === shareOrganizationId;
+                            return (
+                              <button
+                                key={organization.id}
+                                type="button"
+                                role="option"
+                                aria-selected={selected}
+                                onClick={() => {
+                                  setShareOrganizationId(organization.id);
+                                  setShareMenuOpen(false);
+                                }}
+                                className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition ${selected ? "bg-[#eee9ff] text-[#503eb6]" : "hover:bg-[#f7f5f2]"}`}
+                              >
+                                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#f1eeea] text-xs font-black">
+                                  {organization.name.charAt(0).toUpperCase()}
+                                </span>
+                                <span className="min-w-0 flex-1">
+                                  <span className="block truncate text-sm font-bold">
+                                    {organization.name}
+                                  </span>
+                                  <span className="block text-[10px] font-bold uppercase tracking-wide opacity-60">
+                                    {organization.role}
+                                  </span>
+                                </span>
+                                {selected && (
+                                  <svg
+                                    viewBox="0 0 20 20"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2.2"
+                                    className="h-4 w-4"
+                                    aria-hidden="true"
+                                  >
+                                    <path d="m4 10 4 4 8-8" />
+                                  </svg>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                    <button
+                      onClick={() => void shareWorkflow()}
+                      disabled={!shareOrganizationId || !!busyAction}
+                      className="rounded-lg bg-[#503eb6] px-3.5 py-2.5 text-xs font-bold text-white transition hover:bg-[#42319f] disabled:cursor-not-allowed disabled:bg-[#d8d1ca]"
+                    >
+                      {busyAction === "share" ? "Sharing…" : "Share"}
+                    </button>
+                  </div>
+                )}
                 {editing ? (
                   <button
                     onClick={saveDetails}
@@ -245,6 +404,7 @@ export default function ZapDetails() {
                     Save changes
                   </button>
                 ) : (
+                  canEdit &&
                   zap.status !== "ARCHIVED" && (
                     <button
                       onClick={() => lifecycle("publish")}
@@ -257,7 +417,7 @@ export default function ZapDetails() {
                     </button>
                   )
                 )}
-                {!editing && zap.status !== "ARCHIVED" && (
+                {!editing && canEdit && zap.status !== "ARCHIVED" && (
                   <button
                     onClick={() => router.push(`/zap/create?edit=${zap.id}`)}
                     className="rounded-xl border border-[#bdb5ae] bg-white px-4 py-2.5 text-sm font-bold"
@@ -265,7 +425,7 @@ export default function ZapDetails() {
                     Edit
                   </button>
                 )}
-                {zap.status === "PUBLISHED" && (
+                {canEdit && zap.status === "PUBLISHED" && (
                   <button
                     onClick={() => lifecycle("pause")}
                     disabled={!!busyAction}
@@ -274,7 +434,7 @@ export default function ZapDetails() {
                     Pause
                   </button>
                 )}
-                {zap.status === "PAUSED" && (
+                {canEdit && zap.status === "PAUSED" && (
                   <button
                     onClick={() => lifecycle("resume")}
                     disabled={!!busyAction}
@@ -290,7 +450,7 @@ export default function ZapDetails() {
                 >
                   Duplicate
                 </button>
-                {zap.status !== "ARCHIVED" && (
+                {canManage && zap.status !== "ARCHIVED" && (
                   <button
                     onClick={() => lifecycle("archive")}
                     disabled={!!busyAction}
@@ -299,13 +459,15 @@ export default function ZapDetails() {
                     Archive
                   </button>
                 )}
-                <button
-                  onClick={() => setConfirmDelete(true)}
-                  disabled={!!busyAction}
-                  className="rounded-xl border border-red-200 bg-white px-4 py-2.5 text-sm font-bold text-red-700 hover:bg-red-50 disabled:opacity-50"
-                >
-                  {busyAction === "delete" ? "Deleting…" : "Delete"}
-                </button>
+                {canManage && (
+                  <button
+                    onClick={() => setConfirmDelete(true)}
+                    disabled={!!busyAction}
+                    className="rounded-xl border border-red-200 bg-white px-4 py-2.5 text-sm font-bold text-red-700 hover:bg-red-50 disabled:opacity-50"
+                  >
+                    {busyAction === "delete" ? "Deleting…" : "Delete"}
+                  </button>
+                )}
               </div>
             </div>
             <section className="mt-8 rounded-2xl border border-[#e3ded8] bg-white p-5 sm:p-7">
@@ -609,15 +771,38 @@ export default function ZapDetails() {
         )}
       </main>
       {confirmDelete && zap && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#2d2525]/35 p-4" role="dialog" aria-modal="true" aria-labelledby="delete-workflow-title">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[#2d2525]/35 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-workflow-title"
+        >
           <div className="w-full max-w-md rounded-2xl border border-[#e3ded8] bg-white p-6 shadow-2xl">
-            <h2 id="delete-workflow-title" className="text-xl font-black">Delete workflow?</h2>
+            <h2 id="delete-workflow-title" className="text-xl font-black">
+              Delete workflow?
+            </h2>
             <p className="mt-2 text-sm leading-6 text-[#6d6660]">
-              This permanently deletes <strong className="text-[#2d2525]">{zap.name}</strong> and its run history. This cannot be undone.
+              This permanently deletes{" "}
+              <strong className="text-[#2d2525]">{zap.name}</strong> and its run
+              history. This cannot be undone.
             </p>
             <div className="mt-6 flex justify-end gap-3">
-              <button type="button" onClick={() => setConfirmDelete(false)} disabled={!!busyAction} className="rounded-lg border border-[#d8d1ca] px-4 py-2.5 text-sm font-bold hover:bg-[#f7f5f2] disabled:opacity-50">Cancel</button>
-              <button type="button" onClick={deleteWorkflow} disabled={!!busyAction} className="rounded-lg bg-red-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-red-700 disabled:opacity-50">{busyAction === "delete" ? "Deleting…" : "Delete workflow"}</button>
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(false)}
+                disabled={!!busyAction}
+                className="rounded-lg border border-[#d8d1ca] px-4 py-2.5 text-sm font-bold hover:bg-[#f7f5f2] disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={deleteWorkflow}
+                disabled={!!busyAction}
+                className="rounded-lg bg-red-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-red-700 disabled:opacity-50"
+              >
+                {busyAction === "delete" ? "Deleting…" : "Delete workflow"}
+              </button>
             </div>
           </div>
         </div>
@@ -645,7 +830,9 @@ function RunStatus({ status }: { status: WorkflowRun["status"] }) {
 
 function JsonPanel({ label, value }: { label: string; value: unknown }) {
   const signature =
-    value && typeof value === "object" && !Array.isArray(value) &&
+    value &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
     typeof (value as { signature?: unknown }).signature === "string"
       ? (value as { signature: string }).signature
       : null;
@@ -658,7 +845,12 @@ function JsonPanel({ label, value }: { label: string; value: unknown }) {
         {value == null ? "—" : JSON.stringify(value, null, 2)}
       </pre>
       {signature && (
-        <a href={`https://explorer.solana.com/tx/${encodeURIComponent(signature)}?cluster=devnet`} target="_blank" rel="noreferrer" className="mt-2 inline-block text-xs font-bold text-[#503eb6] hover:underline">
+        <a
+          href={`https://explorer.solana.com/tx/${encodeURIComponent(signature)}?cluster=devnet`}
+          target="_blank"
+          rel="noreferrer"
+          className="mt-2 inline-block text-xs font-bold text-[#503eb6] hover:underline"
+        >
           View transfer on Solana Explorer ↗
         </a>
       )}
@@ -688,7 +880,9 @@ function ReadOnlyStep({
         </div>
         <div className="font-bold">{title}</div>
         {detail && (
-          <div className="mt-0.5 line-clamp-2 break-words text-xs text-[#7d756f]">{detail}</div>
+          <div className="mt-0.5 line-clamp-2 break-words text-xs text-[#7d756f]">
+            {detail}
+          </div>
         )}
       </div>
       <span className="ml-auto text-[#168047]">✓</span>

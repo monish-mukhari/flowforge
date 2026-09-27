@@ -20,9 +20,9 @@ async function ownedConnection(
   const connection = await prisma.appConnection.findFirst({
     where: {
       id: connectionId,
-      userId,
       connectorKey,
       status: { not: "REVOKED" },
+      OR: [{ userId }, { organization: { members: { some: { userId } } } }],
     },
   });
   if (!connection)
@@ -194,7 +194,7 @@ export async function executeConnectorAction(input: {
     const token = await getConnectionAccessToken({
       connectionId: connection.id,
       connectorKey: "slack",
-      userId,
+      userId: connection.userId,
     });
     const response = await fetch("https://slack.com/api/chat.postMessage", {
       method: "POST",
@@ -230,7 +230,7 @@ export async function executeConnectorAction(input: {
     const token = await getConnectionAccessToken({
       connectionId: connection.id,
       connectorKey: "google-sheets",
-      userId,
+      userId: connection.userId,
     });
     const spreadsheetId = parse(
       String(actionMetadata.spreadsheetId),
