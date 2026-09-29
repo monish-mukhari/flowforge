@@ -9,6 +9,11 @@ const colors: Record<string, string> = {
   "google-sheets": "bg-white ring-1 ring-[#34a853]/25",
   schedule: "bg-[#0f766e]",
   polling: "bg-[#1d4ed8]",
+  filter: "bg-[#7c3aed]",
+  branch: "bg-[#be185d]",
+  transform: "bg-[#0f766e]",
+  delay: "bg-[#b45309]",
+  loop: "bg-[#0369a1]",
 };
 
 const assets: Record<string, string> = {
@@ -42,11 +47,86 @@ function SolanaIcon() {
 }
 
 function ScheduleIcon() {
-  return <svg viewBox="0 0 24 24" className="h-[68%] w-[68%]" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><circle cx="12" cy="12" r="8.5" /><path d="M12 7v5l3.5 2M8 3.8 6.3 2M16 3.8 17.7 2" strokeLinecap="round" /></svg>;
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className="h-[68%] w-[68%]"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M12 7v5l3.5 2M8 3.8 6.3 2M16 3.8 17.7 2" strokeLinecap="round" />
+    </svg>
+  );
 }
 
 function PollingIcon() {
-  return <svg viewBox="0 0 24 24" className="h-[68%] w-[68%]" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M4 7.5h10M4 12h16M4 16.5h10" strokeLinecap="round" /><path d="m16 5 3 2.5-3 2.5M8 14l-3 2.5L8 19" strokeLinecap="round" strokeLinejoin="round" /></svg>;
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className="h-[68%] w-[68%]"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      aria-hidden="true"
+    >
+      <path d="M4 7.5h10M4 12h16M4 16.5h10" strokeLinecap="round" />
+      <path
+        d="m16 5 3 2.5-3 2.5M8 14l-3 2.5L8 19"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function LogicIcon({ id }: { id: string }) {
+  const paths: Record<string, React.ReactNode> = {
+    filter: (
+      <path d="M5 6h14l-5.3 6.1V18l-3.4 1.5v-7.4L5 6Z" strokeLinejoin="round" />
+    ),
+    branch: (
+      <path
+        d="M7 5v5a3 3 0 0 0 3 3h7m-4-4 4 4-4 4M7 10V7m0 10v2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    ),
+    transform: (
+      <path
+        d="m7 7 3-3m-3 3 3 3M17 17l-3 3m3-3-3-3M10 7h3a4 4 0 0 1 4 4v1M14 17h-3a4 4 0 0 1-4-4v-1"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    ),
+    delay: (
+      <>
+        <circle cx="12" cy="12" r="8" />
+        <path d="M12 7v5l3 2" strokeLinecap="round" strokeLinejoin="round" />
+      </>
+    ),
+    loop: (
+      <path
+        d="M17.5 8A7 7 0 0 0 6 6.5L4 9m2.5 7A7 7 0 0 0 18 17.5l2-2.5M4 5v4h4m12 10v-4h-4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    ),
+  };
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className="h-[64%] w-[64%]"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      aria-hidden="true"
+    >
+      {paths[id]}
+    </svg>
+  );
 }
 
 export function AppIcon({
@@ -74,6 +154,9 @@ export function AppIcon({
     <ScheduleIcon />
   ) : app?.id === "polling" ? (
     <PollingIcon />
+  ) : app?.id &&
+    ["filter", "branch", "transform", "delay", "loop"].includes(app.id) ? (
+    <LogicIcon id={app.id} />
   ) : (
     (app?.name?.charAt(0).toUpperCase() ?? "+")
   );

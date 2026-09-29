@@ -15,6 +15,9 @@ export function Appbar() {
           <a href="#apps" className="hover:text-black">
             Apps
           </a>
+          <a href="#reliability" className="hover:text-black">
+            Reliability
+          </a>
         </nav>
         <div className="flex items-center gap-2">
           <Link
