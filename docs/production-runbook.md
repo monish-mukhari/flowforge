@@ -49,6 +49,61 @@ currently deployed image/commit. Roll back application containers to that image;
 if a migration is incompatible, restore the pre-release backup in a maintenance
 window instead of attempting an ad-hoc reverse migration.
 
+## Automatic deployment from GitHub
+
+The `deploy-production` CI job runs only for a push to `main`, after both the
+quality and Docker smoke jobs pass. It connects to the host with a dedicated SSH
+key, refuses dirty or non-`main` checkouts, fast-forwards to the exact commit that
+CI tested, verifies a PostgreSQL backup, deploys with Compose, and checks the public
+HTTPS endpoint. Backups older than 14 days are removed from the repository's
+`backups` directory after a successful deployment.
+
+Perform this setup once:
+
+1. Confirm the VM checkout can update without prompting:
+
+   ```sh
+   cd /absolute/path/to/flowforge
+   git fetch origin main
+   ```
+
+   A private repository needs a read-only GitHub deploy key configured on the VM.
+
+2. Generate a separate key for GitHub Actions on a trusted computer:
+
+   ```sh
+   ssh-keygen -t ed25519 -f flowforge_deploy_key -C github-actions-flowforge
+   ```
+
+3. Append `flowforge_deploy_key.pub` to the deployment user's
+   `~/.ssh/authorized_keys` on the VM. Keep the private key off the VM.
+
+4. Verify the VM's host-key fingerprint from an existing trusted SSH session:
+
+   ```sh
+   sudo ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub
+   ```
+
+   Capture its matching known-host entry from the trusted computer with
+   `ssh-keyscan -H <VM_EXTERNAL_IP>`. Do not accept an unverified host key.
+
+5. In the GitHub repository, create a `production` environment and add these
+   environment secrets:
+
+   | Secret               | Value                                                |
+   | -------------------- | ---------------------------------------------------- |
+   | `DEPLOY_HOST`        | VM external IP address                               |
+   | `DEPLOY_USER`        | Linux user that owns the checkout and can run Docker |
+   | `DEPLOY_SSH_KEY`     | Complete contents of `flowforge_deploy_key`          |
+   | `DEPLOY_KNOWN_HOSTS` | Verified `ssh-keyscan -H` output                     |
+   | `DEPLOY_PATH`        | Absolute path to the repository on the VM            |
+   | `DEPLOY_DOMAIN`      | Public hostname only, such as `demo.duckdns.org`     |
+
+The production `.env` remains only on the VM and must never be added to GitHub
+secrets or committed. The deployment user must belong to the `docker` group. Add
+required reviewers to the GitHub `production` environment if deployments should
+wait for manual approval.
+
 ## Backup and recovery drill
 
 For the bundled PostgreSQL service:
