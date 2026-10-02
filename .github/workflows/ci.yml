@@ -28,6 +28,10 @@ jobs:
 
   docker-smoke:
     runs-on: ubuntu-latest
+    env:
+      # Keep the full verification flow covered in CI while demo deployments
+      # default to REQUIRE_EMAIL_VERIFICATION=false.
+      REQUIRE_EMAIL_VERIFICATION: "true"
     steps:
       - uses: actions/checkout@v4
       - run: docker compose up --build --wait
