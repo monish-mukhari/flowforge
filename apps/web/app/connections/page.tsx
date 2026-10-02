@@ -12,6 +12,9 @@ function ConnectionsPageContent() {
   const [connections, setConnections] = useState<AppConnection[]>([]);
   const [catalog, setCatalog] = useState<AppOption[]>([]);
   const [mode, setMode] = useState<"email" | "http" | null>(null);
+  const [oauthMode, setOauthMode] = useState<"slack" | "google-sheets" | null>(
+    null,
+  );
   const [form, setForm] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
@@ -35,12 +38,16 @@ function ConnectionsPageContent() {
     void load().catch((caught) => setError(getErrorMessage(caught)));
   }, []);
 
-  async function connectOAuth(provider: "slack" | "google-sheets") {
+  async function connectOAuth(
+    provider: "slack" | "google-sheets",
+    credentials?: { clientId: string; clientSecret: string },
+  ) {
     setBusy(provider);
     setError("");
     try {
       const response = await api.post(
         `/api/v1/connections/oauth/${provider}/start`,
+        credentials ?? {},
       );
       window.location.assign(response.data.authorizationUrl);
     } catch (caught) {
@@ -181,17 +188,34 @@ function ConnectionsPageContent() {
                   disabled={busy === connector.id}
                   onClick={() =>
                     connector.oauthProvider
-                      ? void connectOAuth(
-                          connector.id as "slack" | "google-sheets",
-                        )
+                      ? connector.oauthConfigured
+                        ? void connectOAuth(
+                            connector.id as "slack" | "google-sheets",
+                          )
+                        : setOauthMode(
+                            connector.id as "slack" | "google-sheets",
+                          )
                       : setMode(connector.id as "email" | "http")
                   }
                   className="mt-4 w-full rounded-lg bg-[#2d2525] px-3 py-2 text-xs font-bold text-white disabled:opacity-50"
                 >
                   {connector.oauthProvider
-                    ? `Connect ${connector.name}`
+                    ? connector.oauthConfigured
+                      ? `Connect ${connector.name}`
+                      : `Set up ${connector.name}`
                     : `Add ${connector.name}`}
                 </button>
+                {connector.oauthProvider && connector.oauthConfigured && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setOauthMode(connector.id as "slack" | "google-sheets")
+                    }
+                    className="mt-2 w-full text-[11px] font-bold text-[#6d28d9] hover:underline"
+                  >
+                    Use my own OAuth app
+                  </button>
+                )}
               </div>
             ))}
         </section>
@@ -204,6 +228,15 @@ function ConnectionsPageContent() {
             close={() => setMode(null)}
             save={createManual}
             busy={busy === "create"}
+          />
+        )}
+
+        {oauthMode && (
+          <OAuthConnection
+            provider={oauthMode}
+            busy={busy === oauthMode}
+            close={() => setOauthMode(null)}
+            connect={(credentials) => void connectOAuth(oauthMode, credentials)}
           />
         )}
 
@@ -330,6 +363,78 @@ export default function ConnectionsPage() {
     <Suspense fallback={<main className="min-h-screen bg-[#f7f5f2]" />}>
       <ConnectionsPageContent />
     </Suspense>
+  );
+}
+
+function OAuthConnection({
+  provider,
+  busy,
+  close,
+  connect,
+}: {
+  provider: "slack" | "google-sheets";
+  busy: boolean;
+  close: () => void;
+  connect: (credentials: { clientId: string; clientSecret: string }) => void;
+}) {
+  const [clientId, setClientId] = useState("");
+  const [clientSecret, setClientSecret] = useState("");
+  const name = provider === "slack" ? "Slack" : "Google Sheets";
+  const callbackPath = `/api/v1/connections/oauth/${provider}/callback`;
+  const [callbackUrl, setCallbackUrl] = useState(callbackPath);
+
+  useEffect(() => {
+    setCallbackUrl(`${window.location.origin}${callbackPath}`);
+  }, [callbackPath]);
+
+  return (
+    <section className="mt-6 rounded-2xl border border-[#d8d1ca] bg-white p-6">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-xs font-black uppercase tracking-[0.14em] text-[#7c3aed]">
+            Personal OAuth app
+          </p>
+          <h2 className="mt-1 text-xl font-black">Connect {name}</h2>
+        </div>
+        <button onClick={close} className="text-sm font-bold text-[#6d6660]">
+          Close
+        </button>
+      </div>
+      <p className="mt-3 max-w-3xl text-sm leading-6 text-[#6d6660]">
+        Create an OAuth app in your{" "}
+        {provider === "slack" ? "Slack" : "Google Cloud"} account, add the
+        callback URL below, then paste its credentials. They are encrypted and
+        used only for your connection.
+      </p>
+      <div className="mt-4 rounded-xl bg-[#f7f5f2] p-3">
+        <span className="block text-[10px] font-black uppercase tracking-wider text-[#7d756f]">
+          Redirect / callback URL
+        </span>
+        <code className="mt-1 block break-all text-xs">{callbackUrl}</code>
+      </div>
+      <div className="mt-4 grid gap-4 md:grid-cols-2">
+        <Input label="Client ID" value={clientId} onChange={setClientId} />
+        <Input
+          label="Client secret"
+          type="password"
+          value={clientSecret}
+          onChange={setClientSecret}
+        />
+      </div>
+      <button
+        type="button"
+        disabled={busy || !clientId.trim() || !clientSecret.trim()}
+        onClick={() =>
+          connect({
+            clientId: clientId.trim(),
+            clientSecret: clientSecret.trim(),
+          })
+        }
+        className="mt-5 rounded-lg bg-[#ff4f00] px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50"
+      >
+        {busy ? "Opening authorization…" : `Continue to ${name}`}
+      </button>
+    </section>
   );
 }
 

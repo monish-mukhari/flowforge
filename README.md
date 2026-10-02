@@ -39,7 +39,7 @@ Browser API calls use the web app's own origin and are proxied at runtime to kee
 
 ## Connector platform
 
-Open **Connections** in the dashboard to create reusable encrypted SMTP and HTTP connections or start Slack and Google OAuth. Connection secrets are AES-256-GCM encrypted at rest and are never included in API responses. Configure `CONNECTION_ENCRYPTION_KEY` with at least 32 random characters outside local development. Slack OAuth uses the v2 authorization flow; Google Sheets uses offline OAuth with PKCE. Configure the optional provider client IDs and secrets in `.env` and register callback URLs under `/api/v1/connections/oauth/{provider}/callback`.
+Open **Connections** in the dashboard to create reusable encrypted SMTP and HTTP connections or start Slack and Google OAuth. Connection secrets are AES-256-GCM encrypted at rest and are never included in API responses. Configure `CONNECTION_ENCRYPTION_KEY` with at least 32 random characters outside local development. Slack OAuth uses the v2 authorization flow; Google Sheets uses offline OAuth with PKCE. Configure shared provider client IDs and secrets in `.env` for one-click connections, or let a user supply credentials for their own OAuth app from the Connections page. Register callback URLs under `/api/v1/connections/oauth/{provider}/callback`.
 
 The workflow builder exposes versioned Email, Solana, HTTP Request, Slack, and Google Sheets contracts. HTTP actions only permit HTTPS public endpoints, Email can use a reusable SMTP connection, Slack posts through `chat.postMessage`, and Google Sheets appends a row through the Sheets Values API.
 

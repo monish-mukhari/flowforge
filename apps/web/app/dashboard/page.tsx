@@ -83,7 +83,7 @@ export default function Dashboard() {
 
   return (
     <DashboardShell>
-      <main className="mx-auto max-w-7xl px-4 py-7 sm:px-6 md:px-8 md:py-10">
+      <main className="mx-auto max-w-6xl px-4 py-7 sm:px-6 md:px-8 md:py-9">
         <header className="flex flex-col justify-between gap-6 sm:flex-row sm:items-end">
           <div>
             <p className="text-xs font-black uppercase tracking-[0.16em] text-[#7c3aed]">
@@ -121,15 +121,12 @@ export default function Dashboard() {
         )}
 
         <section
-          className="mt-8 grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
+          className="mt-7 grid gap-px overflow-hidden rounded-2xl border border-[#e3ded8] bg-[#e3ded8] sm:grid-cols-2 lg:grid-cols-4"
           aria-label="Workflow summary"
         >
           {loading ? (
             [1, 2, 3, 4].map((item) => (
-              <div
-                key={item}
-                className="h-24 animate-pulse rounded-2xl border border-[#e3ded8] bg-white"
-              />
+              <div key={item} className="h-20 animate-pulse bg-white" />
             ))
           ) : (
             <>
@@ -154,7 +151,7 @@ export default function Dashboard() {
           )}
         </section>
 
-        <div className="mt-6 grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_280px]">
+        <div className="mt-6">
           <section className="overflow-hidden rounded-2xl border border-[#e3ded8] bg-white">
             <div className="border-b border-[#e3ded8] p-4 sm:p-5">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -248,7 +245,7 @@ export default function Dashboard() {
             )}
           </section>
 
-          <aside className="space-y-5">
+          <aside className="hidden">
             <section className="rounded-2xl border border-[#e3ded8] bg-white p-5">
               <p className="text-xs font-black uppercase tracking-[0.14em] text-[#7c3aed]">
                 Quick actions
@@ -444,9 +441,9 @@ function StatCard({
   accent?: boolean;
 }) {
   return (
-    <div className="flex items-center gap-4 rounded-2xl border border-[#e3ded8] bg-white p-4 sm:p-5">
+    <div className="flex items-center gap-3 bg-white px-4 py-4 sm:px-5">
       <span
-        className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${accent ? "bg-[#e4f7eb] text-[#168047]" : "bg-[#f2ecff] text-[#6d28d9]"}`}
+        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${accent ? "bg-[#e4f7eb] text-[#168047]" : "bg-[#f2ecff] text-[#6d28d9]"}`}
       >
         <DashboardIcon name={icon} />
       </span>

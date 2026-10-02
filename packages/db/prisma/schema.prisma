@@ -60,12 +60,12 @@ model User {
   runNotifications        RunNotification[]
   appConnections          AppConnection[]
   oauthStates             OAuthState[]
-  organizationsOwned      Organization[]          @relation("OrganizationOwner")
+  organizationsOwned      Organization[]           @relation("OrganizationOwner")
   memberships             OrganizationMember[]
   invitationsSent         OrganizationInvitation[] @relation("InvitationSender")
   auditEvents             AuditEvent[]
-  approvalsRequested      PublishApproval[] @relation("ApprovalRequester")
-  approvalsReviewed       PublishApproval[] @relation("ApprovalReviewer")
+  approvalsRequested      PublishApproval[]        @relation("ApprovalRequester")
+  approvalsReviewed       PublishApproval[]        @relation("ApprovalReviewer")
 }
 
 model SolanaWallet {
@@ -230,22 +230,22 @@ model ConnectorDefinition {
 }
 
 model AppConnection {
-  id                   String    @id @default(uuid())
-  userId               Int       @map("user_id")
-  user                 User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  connectorKey         String    @map("connector_key")
+  id                   String        @id @default(uuid())
+  userId               Int           @map("user_id")
+  user                 User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  connectorKey         String        @map("connector_key")
   name                 String
-  encryptedCredentials String    @map("encrypted_credentials")
-  status               String    @default("ACTIVE")
-  externalAccountId    String?   @map("external_account_id")
-  externalAccountName  String?   @map("external_account_name")
-  scopes               Json      @default("[]")
-  expiresAt            DateTime? @map("expires_at")
-  lastTestedAt         DateTime? @map("last_tested_at")
-  lastError            String?   @map("last_error")
-  createdAt            DateTime  @default(now()) @map("created_at")
-  updatedAt            DateTime  @updatedAt @map("updated_at")
-  organizationId       String?   @map("organization_id")
+  encryptedCredentials String        @map("encrypted_credentials")
+  status               String        @default("ACTIVE")
+  externalAccountId    String?       @map("external_account_id")
+  externalAccountName  String?       @map("external_account_name")
+  scopes               Json          @default("[]")
+  expiresAt            DateTime?     @map("expires_at")
+  lastTestedAt         DateTime?     @map("last_tested_at")
+  lastError            String?       @map("last_error")
+  createdAt            DateTime      @default(now()) @map("created_at")
+  updatedAt            DateTime      @updatedAt @map("updated_at")
+  organizationId       String?       @map("organization_id")
   organization         Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
 
   @@index([userId, connectorKey, status])
@@ -259,19 +259,20 @@ enum OrganizationRole {
 }
 
 model Organization {
-  id          String   @id @default(uuid())
+  id          String                   @id @default(uuid())
   name        String
-  slug        String   @unique
-  ownerId     Int      @map("owner_id")
-  owner       User     @relation("OrganizationOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  slug        String                   @unique
+  ownerId     Int                      @map("owner_id")
+  owner       User                     @relation("OrganizationOwner", fields: [ownerId], references: [id], onDelete: Cascade)
   members     OrganizationMember[]
   invitations OrganizationInvitation[]
   zaps        Zap[]
   connections AppConnection[]
   auditEvents AuditEvent[]
   approvals   PublishApproval[]
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  createdAt   DateTime                 @default(now()) @map("created_at")
+  updatedAt   DateTime                 @updatedAt @map("updated_at")
+
   @@index([ownerId])
 }
 
@@ -284,6 +285,7 @@ model OrganizationMember {
   role           OrganizationRole @default(VIEWER)
   createdAt      DateTime         @default(now()) @map("created_at")
   updatedAt      DateTime         @updatedAt @map("updated_at")
+
   @@unique([organizationId, userId])
   @@index([userId])
 }
@@ -300,6 +302,7 @@ model OrganizationInvitation {
   expiresAt      DateTime         @map("expires_at")
   acceptedAt     DateTime?        @map("accepted_at")
   createdAt      DateTime         @default(now()) @map("created_at")
+
   @@index([email, expiresAt])
 }
 
@@ -314,6 +317,7 @@ model AuditEvent {
   resourceId     String?      @map("resource_id")
   metadata       Json         @default("{}")
   createdAt      DateTime     @default(now()) @map("created_at")
+
   @@index([organizationId, createdAt])
 }
 
@@ -331,18 +335,20 @@ model PublishApproval {
   note           String?
   createdAt      DateTime     @default(now()) @map("created_at")
   reviewedAt     DateTime?    @map("reviewed_at")
+
   @@index([organizationId, status, createdAt])
 }
 
 model OAuthState {
-  id           String   @id @default(uuid())
-  userId       Int      @map("user_id")
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  connectorKey String   @map("connector_key")
-  tokenHash    String   @unique @map("token_hash")
-  codeVerifier String?  @map("code_verifier")
-  expiresAt    DateTime @map("expires_at")
-  createdAt    DateTime @default(now()) @map("created_at")
+  id                         String   @id @default(uuid())
+  userId                     Int      @map("user_id")
+  user                       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  connectorKey               String   @map("connector_key")
+  tokenHash                  String   @unique @map("token_hash")
+  codeVerifier               String?  @map("code_verifier")
+  encryptedClientCredentials String?  @map("encrypted_client_credentials")
+  expiresAt                  DateTime @map("expires_at")
+  createdAt                  DateTime @default(now()) @map("created_at")
 
   @@index([userId, connectorKey])
   @@index([expiresAt])

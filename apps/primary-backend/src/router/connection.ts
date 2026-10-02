@@ -64,6 +64,16 @@ const callbackSchema = z.object({
   code: z.string().min(1).optional(),
   error: z.string().optional(),
 });
+const oauthStartSchema = z
+  .object({
+    clientId: z.string().trim().min(1).max(1000).optional(),
+    clientSecret: z.string().trim().min(1).max(4000).optional(),
+  })
+  .refine((value) => Boolean(value.clientId) === Boolean(value.clientSecret), {
+    message: "Client ID and client secret must be provided together",
+  });
+
+type OAuthClient = { clientId: string; clientSecret: string };
 
 function hashState(value: string) {
   return createHash("sha256").update(value).digest("hex");
@@ -80,17 +90,11 @@ function publicConnection<T extends { encryptedCredentials: string }>(
   return safe;
 }
 
-async function exchangeSlack(code: string) {
-  if (!config.SLACK_CLIENT_ID || !config.SLACK_CLIENT_SECRET)
-    throw new HttpError(
-      503,
-      "OAUTH_NOT_CONFIGURED",
-      "Slack OAuth is not configured",
-    );
+async function exchangeSlack(code: string, client: OAuthClient) {
   const response = await fetch("https://slack.com/api/oauth.v2.access", {
     method: "POST",
     headers: {
-      authorization: `Basic ${Buffer.from(`${config.SLACK_CLIENT_ID}:${config.SLACK_CLIENT_SECRET}`).toString("base64")}`,
+      authorization: `Basic ${Buffer.from(`${client.clientId}:${client.clientSecret}`).toString("base64")}`,
       "content-type": "application/x-www-form-urlencoded",
     },
     body: new URLSearchParams({ code, redirect_uri: callbackUrl("slack") }),
@@ -121,20 +125,18 @@ async function exchangeSlack(code: string) {
   };
 }
 
-async function exchangeGoogle(code: string, codeVerifier: string) {
-  if (!config.GOOGLE_CLIENT_ID || !config.GOOGLE_CLIENT_SECRET)
-    throw new HttpError(
-      503,
-      "OAUTH_NOT_CONFIGURED",
-      "Google OAuth is not configured",
-    );
+async function exchangeGoogle(
+  code: string,
+  codeVerifier: string,
+  client: OAuthClient,
+) {
   const response = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       code,
-      client_id: config.GOOGLE_CLIENT_ID,
-      client_secret: config.GOOGLE_CLIENT_SECRET,
+      client_id: client.clientId,
+      client_secret: client.clientSecret,
       redirect_uri: callbackUrl("google-sheets"),
       grant_type: "authorization_code",
       code_verifier: codeVerifier,
@@ -248,7 +250,17 @@ router.get(
   "/catalog",
   authMiddleware,
   asyncRoute(async (_req, res) => {
-    res.json({ connectors: connectorRegistry.map(publicConnectorContract) });
+    res.json({
+      connectors: connectorRegistry.map((connector) => ({
+        ...publicConnectorContract(connector),
+        oauthConfigured:
+          connector.oauthProvider === "slack"
+            ? Boolean(config.SLACK_CLIENT_ID && config.SLACK_CLIENT_SECRET)
+            : connector.oauthProvider === "google-sheets"
+              ? Boolean(config.GOOGLE_CLIENT_ID && config.GOOGLE_CLIENT_SECRET)
+              : undefined,
+      })),
+    });
   }),
 );
 
@@ -404,12 +416,41 @@ router.post(
   authMiddleware,
   asyncRoute(async (req, res) => {
     const { provider } = providerSchema.parse(req.params);
+    const suppliedClient = oauthStartSchema.parse(req.body);
     const definition = connectorContract(provider);
     if (!definition?.oauthProvider)
       throw new HttpError(
         400,
         "OAUTH_NOT_SUPPORTED",
         "Connector does not support OAuth",
+      );
+    const configuredClient: OAuthClient | undefined =
+      provider === "slack"
+        ? config.SLACK_CLIENT_ID && config.SLACK_CLIENT_SECRET
+          ? {
+              clientId: config.SLACK_CLIENT_ID,
+              clientSecret: config.SLACK_CLIENT_SECRET,
+            }
+          : undefined
+        : config.GOOGLE_CLIENT_ID && config.GOOGLE_CLIENT_SECRET
+          ? {
+              clientId: config.GOOGLE_CLIENT_ID,
+              clientSecret: config.GOOGLE_CLIENT_SECRET,
+            }
+          : undefined;
+    const customClient =
+      suppliedClient.clientId && suppliedClient.clientSecret
+        ? {
+            clientId: suppliedClient.clientId,
+            clientSecret: suppliedClient.clientSecret,
+          }
+        : undefined;
+    const oauthClient = customClient ?? configuredClient;
+    if (!oauthClient)
+      throw new HttpError(
+        503,
+        "OAUTH_NOT_CONFIGURED",
+        `${provider === "slack" ? "Slack" : "Google"} OAuth needs a client ID and client secret`,
       );
     const state = randomBytes(32).toString("base64url");
     const verifier = randomBytes(48).toString("base64url");
@@ -422,36 +463,27 @@ router.post(
         connectorKey: provider,
         tokenHash: hashState(state),
         codeVerifier: provider === "google-sheets" ? verifier : null,
+        encryptedClientCredentials: customClient
+          ? encryptConnectionCredentials(customClient)
+          : null,
         expiresAt: new Date(Date.now() + 10 * 60_000),
       },
     });
     let authorizationUrl: URL;
     if (provider === "slack") {
-      if (!config.SLACK_CLIENT_ID)
-        throw new HttpError(
-          503,
-          "OAUTH_NOT_CONFIGURED",
-          "Slack OAuth is not configured",
-        );
       authorizationUrl = new URL("https://slack.com/oauth/v2/authorize");
       authorizationUrl.search = new URLSearchParams({
-        client_id: config.SLACK_CLIENT_ID,
+        client_id: oauthClient.clientId,
         scope: "chat:write",
         redirect_uri: callbackUrl(provider),
         state,
       }).toString();
     } else {
-      if (!config.GOOGLE_CLIENT_ID)
-        throw new HttpError(
-          503,
-          "OAUTH_NOT_CONFIGURED",
-          "Google OAuth is not configured",
-        );
       authorizationUrl = new URL(
         "https://accounts.google.com/o/oauth2/v2/auth",
       );
       authorizationUrl.search = new URLSearchParams({
-        client_id: config.GOOGLE_CLIENT_ID,
+        client_id: oauthClient.clientId,
         redirect_uri: callbackUrl(provider),
         response_type: "code",
         access_type: "offline",
@@ -493,18 +525,50 @@ router.get(
         `${config.APP_PUBLIC_URL}/connections?error=${encodeURIComponent(query.error ?? "authorization_denied")}`,
       );
     try {
+      const customClient = state.encryptedClientCredentials
+        ? (decryptConnectionCredentials(
+            state.encryptedClientCredentials,
+          ) as OAuthClient)
+        : undefined;
+      const oauthClient: OAuthClient | undefined =
+        customClient ??
+        (provider === "slack"
+          ? config.SLACK_CLIENT_ID && config.SLACK_CLIENT_SECRET
+            ? {
+                clientId: config.SLACK_CLIENT_ID,
+                clientSecret: config.SLACK_CLIENT_SECRET,
+              }
+            : undefined
+          : config.GOOGLE_CLIENT_ID && config.GOOGLE_CLIENT_SECRET
+            ? {
+                clientId: config.GOOGLE_CLIENT_ID,
+                clientSecret: config.GOOGLE_CLIENT_SECRET,
+              }
+            : undefined);
+      if (!oauthClient)
+        throw new Error("OAuth client credentials are no longer available");
       const exchanged =
         provider === "slack"
-          ? await exchangeSlack(query.code)
-          : await exchangeGoogle(query.code, state.codeVerifier ?? "");
+          ? await exchangeSlack(query.code, oauthClient)
+          : await exchangeGoogle(
+              query.code,
+              state.codeVerifier ?? "",
+              oauthClient,
+            );
       await prisma.appConnection.create({
         data: {
           userId: state.userId,
           connectorKey: provider,
           name: exchanged.externalAccountName,
-          encryptedCredentials: encryptConnectionCredentials(
-            exchanged.credentials,
-          ),
+          encryptedCredentials: encryptConnectionCredentials({
+            ...exchanged.credentials,
+            ...(customClient
+              ? {
+                  oauthClientId: customClient.clientId,
+                  oauthClientSecret: customClient.clientSecret,
+                }
+              : {}),
+          }),
           externalAccountId: exchanged.externalAccountId,
           externalAccountName: exchanged.externalAccountName,
           scopes: exchanged.scopes as Prisma.InputJsonValue,

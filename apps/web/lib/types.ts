@@ -7,6 +7,7 @@ export type AppOption = {
   description?: string;
   authType?: "NONE" | "OPTIONAL_CONNECTION" | "OAUTH2";
   oauthProvider?: string;
+  oauthConfigured?: boolean;
   fields?: Array<{
     key: string;
     label: string;

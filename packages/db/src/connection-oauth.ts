@@ -156,6 +156,27 @@ export async function getConnectionAccessToken(input: {
       const credentials = decryptConnectionCredentials(
         connection.encryptedCredentials,
       );
+      const customClientId = String(credentials.oauthClientId ?? "");
+      const customClientSecret = String(credentials.oauthClientSecret ?? "");
+      const connectionClients =
+        customClientId && customClientSecret
+          ? {
+              ...clients,
+              ...(input.connectorKey === "slack"
+                ? {
+                    slack: {
+                      clientId: customClientId,
+                      clientSecret: customClientSecret,
+                    },
+                  }
+                : {
+                    google: {
+                      clientId: customClientId,
+                      clientSecret: customClientSecret,
+                    },
+                  }),
+            }
+          : clients;
       const current = String(credentials.accessToken ?? "");
       if (!current)
         return connectionFailure(
@@ -184,7 +205,11 @@ export async function getConnectionAccessToken(input: {
 
       let request: ReturnType<typeof refreshRequest>;
       try {
-        request = refreshRequest(input.connectorKey, refreshToken, clients);
+        request = refreshRequest(
+          input.connectorKey,
+          refreshToken,
+          connectionClients,
+        );
       } catch (error) {
         const tokenError = error as ConnectionTokenError;
         return connectionFailure(
