@@ -45,7 +45,11 @@ The workflow builder exposes versioned Email, Solana, HTTP Request, Slack, and G
 
 ## Accounts and sessions
 
-Passwords are stored with Argon2id. Accounts must be verified using the message captured by Mailpit before login. Access sessions last 15 minutes and are held in an HttpOnly cookie; a rotating refresh cookie keeps the session active for seven days. Signing out and password resets revoke server-side sessions.
+Passwords are stored with Argon2id. Email verification is temporarily disabled by
+default for demo deployments; set `REQUIRE_EMAIL_VERIFICATION=true` to send a
+verification message and require it before login. Access sessions last 15 minutes
+and are held in an HttpOnly cookie; a rotating refresh cookie keeps the session
+active for seven days. Signing out and password resets revoke server-side sessions.
 
 To test password recovery locally, request a reset from `/forgot-password`, open the resulting Mailpit message, and follow its one-hour link. Existing development users created by an older version can log in with their current password once; the password is upgraded to Argon2id immediately.
 

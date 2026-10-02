@@ -35,24 +35,41 @@ router.post(
       where: { email: data.username },
       select: { id: true, email: true, emailVerifiedAt: true },
     });
-    if (existing?.emailVerifiedAt)
+    if (
+      existing &&
+      (!config.REQUIRE_EMAIL_VERIFICATION || existing.emailVerifiedAt)
+    )
       throw new HttpError(
         409,
         "ACCOUNT_EXISTS",
         "An account with this email already exists",
       );
-    const token = newOpaqueToken();
-  const tokenData = {
-      tokenHash: hashOpaqueToken(token),
-      expiresAt: new Date(Date.now() + 24 * 60 * 60_000),
-  };
+    const verificationToken = config.REQUIRE_EMAIL_VERIFICATION
+      ? newOpaqueToken()
+      : undefined;
+    const verificationTokenData = verificationToken
+      ? {
+          tokenHash: hashOpaqueToken(verificationToken),
+          expiresAt: new Date(Date.now() + 24 * 60 * 60_000),
+        }
+      : undefined;
     const user = existing
       ? await prisma.user.update({
           where: { id: existing.id },
           data: {
             name: data.name,
             passwordHash: await hashPassword(data.password),
-            emailVerificationTokens: { deleteMany: {}, create: tokenData },
+            ...(verificationTokenData
+              ? {
+                  emailVerificationTokens: {
+                    deleteMany: {},
+                    create: verificationTokenData,
+                  },
+                }
+              : {
+                  emailVerifiedAt: new Date(),
+                  emailVerificationTokens: { deleteMany: {} },
+                }),
           },
         })
       : await prisma.user.create({
@@ -60,20 +77,40 @@ router.post(
             name: data.name,
             email: data.username,
             passwordHash: await hashPassword(data.password),
-            emailVerificationTokens: { create: tokenData },
+            ...(verificationTokenData
+              ? {
+                  emailVerificationTokens: {
+                    create: verificationTokenData,
+                  },
+                }
+              : { emailVerifiedAt: new Date() }),
           },
         });
     if (!existing) {
-      const slug = `${data.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}-${randomBytes(3).toString("hex")}`;
+      const slug = `${data.name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-|-$/g, "")}-${randomBytes(3).toString("hex")}`;
       await prisma.$transaction(async (tx) => {
-        const organization = await tx.organization.create({ data: { name: `${data.name}'s workspace`, slug, ownerId: user.id } });
-        await tx.organizationMember.create({ data: { organizationId: organization.id, userId: user.id, role: "OWNER" } });
+        const organization = await tx.organization.create({
+          data: { name: `${data.name}'s workspace`, slug, ownerId: user.id },
+        });
+        await tx.organizationMember.create({
+          data: {
+            organizationId: organization.id,
+            userId: user.id,
+            role: "OWNER",
+          },
+        });
       });
     }
-    await sendVerificationEmail(user.email, token);
-    return res
-      .status(201)
-      .json({ message: "Please verify your account by checking your email" });
+    if (verificationToken)
+      await sendVerificationEmail(user.email, verificationToken);
+    return res.status(201).json({
+      message: config.REQUIRE_EMAIL_VERIFICATION
+        ? "Please verify your account by checking your email"
+        : "Account created. You can now sign in.",
+    });
   }),
 );
 
@@ -90,7 +127,7 @@ router.post(
         "INVALID_CREDENTIALS",
         "Email or password is incorrect",
       );
-    if (!user.emailVerifiedAt)
+    if (config.REQUIRE_EMAIL_VERIFICATION && !user.emailVerifiedAt)
       throw new HttpError(
         403,
         "EMAIL_NOT_VERIFIED",
@@ -268,7 +305,8 @@ router.get(
         "confirmed",
       );
       balanceSol =
-        (await connection.getBalance(new PublicKey(wallet.publicKey))) / 1_000_000_000;
+        (await connection.getBalance(new PublicKey(wallet.publicKey))) /
+        1_000_000_000;
     } catch {
       // Wallet identity remains available if the RPC is temporarily unavailable.
     }
