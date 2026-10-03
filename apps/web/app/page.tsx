@@ -2,435 +2,262 @@ import Link from "next/link";
 import { Appbar } from "../components/Appbar";
 import { AppIcon } from "../components/AppIcon";
 
-const triggers = [
-  {
-    id: "webhook",
-    name: "Webhook",
-    text: "Start instantly from a secure JSON endpoint unique to each workflow.",
-  },
-  {
-    id: "schedule",
-    name: "Schedule",
-    text: "Run recurring jobs on the interval that fits your process.",
-  },
-  {
-    id: "polling",
-    name: "Polling",
-    text: "Watch an HTTPS API and continue only when its response changes.",
-  },
+const apps = [
+  { id: "slack", name: "Slack" },
+  { id: "email", name: "Gmail" },
+  { id: "google-sheets", name: "Google Sheets" },
+  { id: "http", name: "HTTP" },
+  { id: "solana", name: "Solana" },
 ];
 
-const integrations = [
+const features = [
   {
-    id: "email",
-    name: "Email",
-    text: "Send dynamic messages through a reusable SMTP connection.",
+    number: "01",
+    title: "Trigger on your terms",
+    copy: "Start with a webhook, a schedule, or a changing API. FlowForge is ready the moment your work is.",
+    icon: "webhook",
   },
   {
-    id: "http",
-    name: "HTTP Request",
-    text: "Call external HTTPS APIs with mapped workflow data.",
+    number: "02",
+    title: "Shape every step",
+    copy: "Transform data, add conditions, branch paths, and connect the tools your process already uses.",
+    icon: "branch",
   },
   {
-    id: "slack",
-    name: "Slack",
-    text: "Post messages to channels through a connected workspace.",
-  },
-  {
-    id: "google-sheets",
-    name: "Google Sheets",
-    text: "Append structured workflow results to a spreadsheet.",
-  },
-  {
-    id: "solana",
-    name: "Solana",
-    text: "Transfer devnet SOL from an encrypted per-account wallet.",
-  },
-];
-
-const logicBlocks = [
-  ["filter", "Filter", "Continue only when your condition is true."],
-  ["branch", "Branch", "Choose a path from workflow data."],
-  ["transform", "Transform", "Reshape values for the next action."],
-  ["delay", "Delay", "Pause execution before continuing."],
-  ["loop", "Loop", "Run an action for every item in a list."],
-] as const;
-
-const operations = [
-  {
-    eyebrow: "See every run",
-    title: "Know what happened",
-    text: "Filter runs by status, workflow, date, and order. Inspect every step, attempt, input, and sanitized output from one timeline.",
-    tone: "bg-[#efeaff]",
-  },
-  {
-    eyebrow: "Built to recover",
-    title: "Retry with confidence",
-    text: "Leased workers, exponential retries, transactional delivery, and a dead-letter queue keep failures visible and recoverable.",
-    tone: "bg-[#e7f7f1]",
-  },
-  {
-    eyebrow: "Safe changes",
-    title: "Replay the right version",
-    text: "Published definitions are snapshotted with every run, so a replay uses the exact workflow version that originally executed.",
-    tone: "bg-[#fff0e8]",
+    number: "03",
+    title: "See what happened",
+    copy: "Follow every run from trigger to result. Inspect attempts, retry failures, and replay with confidence.",
+    icon: "polling",
   },
 ];
 
 export default function Home() {
   return (
-    <main className="min-h-screen overflow-hidden bg-[#fffdf9]">
+    <main className="min-h-screen overflow-hidden bg-[#fbfaf8] [font-family:var(--font-geist-sans)]">
       <Appbar />
 
-      <section className="relative border-b border-[#e3ded8] px-5 pb-24 pt-16 sm:pt-20">
-        <div className="pointer-events-none absolute left-[-100px] top-10 h-72 w-72 rounded-full bg-[#f0ddff] blur-3xl" />
-        <div className="pointer-events-none absolute right-[-90px] top-20 h-80 w-80 rounded-full bg-[#ffddeb] blur-3xl" />
-        <div className="relative mx-auto grid max-w-6xl items-center gap-14 lg:grid-cols-[1.05fr_0.95fr]">
-          <div className="text-center lg:text-left">
-            <span className="inline-flex rounded-full border border-[#d8d1ca] bg-white/80 px-4 py-1.5 text-xs font-bold uppercase tracking-[0.14em] backdrop-blur">
-              Webhooks · schedules · polling
-            </span>
-            <h1 className="mt-7 text-5xl font-black leading-[0.98] tracking-[-0.055em] sm:text-7xl">
-              Build workflows that keep moving.
+      <section className="relative px-5 pb-20 pt-16 sm:pb-24 sm:pt-20 lg:pb-28 lg:pt-24">
+        <div className="pointer-events-none absolute inset-x-0 top-0 mx-auto h-[520px] max-w-7xl bg-[radial-gradient(circle_at_72%_35%,rgba(192,38,211,0.12),transparent_35%),radial-gradient(circle_at_20%_15%,rgba(124,58,237,0.09),transparent_28%)]" />
+        <div className="relative mx-auto grid max-w-6xl items-center gap-14 lg:grid-cols-[1.08fr_0.92fr] lg:gap-20">
+          <div className="max-w-2xl text-center lg:text-left">
+            <div className="inline-flex items-center gap-2 rounded-full border border-[#ded8d2] bg-white/80 px-3 py-1.5 text-xs font-semibold text-[#5f5752] shadow-sm backdrop-blur">
+              <span className="h-1.5 w-1.5 rounded-full bg-[#7c3aed]" />
+              Automation you can actually follow
+            </div>
+            <h1 className="mt-7 text-[3.25rem] font-semibold leading-[0.98] tracking-[-0.06em] text-[#241f20] sm:text-7xl lg:text-[5rem]">
+              Move work forward, automatically.
             </h1>
-            <p className="mx-auto mt-7 max-w-2xl text-lg leading-8 text-[#6d6660] lg:mx-0">
-              Trigger work from an event, a schedule, or a changing API. Shape
-              the data, connect your tools, and follow every step from first run
-              to final result.
+            <p className="mx-auto mt-7 max-w-xl text-lg leading-8 text-[#6d6660] lg:mx-0">
+              Build reliable workflows from triggers, logic, and the apps you
+              already use—then see every run from start to finish.
             </p>
-            <div className="mt-9 flex flex-col items-center gap-3 sm:flex-row lg:justify-start">
+            <div className="mt-9 flex flex-col justify-center gap-3 sm:flex-row lg:justify-start">
               <Link
                 href="/signup"
-                className="rounded-xl bg-[#ff4f00] px-7 py-4 font-bold text-white shadow-lg shadow-purple-200 transition hover:-translate-y-0.5 hover:bg-[#d94100]"
+                className="inline-flex items-center justify-center rounded-xl bg-[#2d2525] px-6 py-3.5 font-semibold text-white shadow-[0_8px_24px_rgba(45,37,37,0.16)] transition hover:-translate-y-0.5 hover:bg-[#171313]"
               >
-                Build your first workflow →
+                Start building free
+                <ArrowRight />
               </Link>
               <a
-                href="#capabilities"
-                className="rounded-xl border border-[#bdb5ae] bg-white px-7 py-4 font-bold transition hover:bg-[#f7f5f2]"
+                href="#how-it-works"
+                className="inline-flex items-center justify-center rounded-xl border border-[#d8d1ca] bg-white px-6 py-3.5 font-semibold text-[#2d2525] transition hover:border-[#aaa19a] hover:bg-[#f7f5f2]"
               >
-                Explore capabilities
+                See how it works
               </a>
             </div>
-            <div className="mt-9 flex flex-wrap justify-center gap-x-6 gap-y-2 text-xs font-bold uppercase tracking-[0.11em] text-[#7d756f] lg:justify-start">
-              <span>3 trigger types</span>
-              <span>10 action blocks</span>
-              <span>Replayable runs</span>
-            </div>
+            <p className="mt-5 text-sm text-[#817972]">
+              No credit card required · Set up in minutes
+            </p>
           </div>
 
-          <WorkflowCanvas />
+          <WorkflowPreview />
         </div>
       </section>
 
-      <section id="how-it-works" className="mx-auto max-w-6xl px-5 py-24">
-        <div className="grid gap-12 lg:grid-cols-[0.75fr_1.25fr]">
-          <div>
-            <p className="text-sm font-bold uppercase tracking-[0.14em] text-[#ff4f00]">
-              How it works
-            </p>
-            <h2 className="mt-3 text-4xl font-black tracking-[-0.045em] sm:text-5xl">
-              From signal to outcome, in one clear flow.
-            </h2>
-            <p className="mt-5 max-w-md leading-7 text-[#6d6660]">
-              Start with a ready-made template or build from scratch. Dynamic
-              fields carry data from one step into the next.
-            </p>
-          </div>
-          <div className="grid gap-4 sm:grid-cols-3">
-            {[
-              [
-                "01",
-                "Choose a trigger",
-                "Receive a webhook, run on a schedule, or watch an API for changes.",
-              ],
-              [
-                "02",
-                "Build the flow",
-                "Add integrations and logic, then map data with simple template fields.",
-              ],
-              [
-                "03",
-                "Publish and observe",
-                "Run asynchronously, inspect each attempt, and replay when needed.",
-              ],
-            ].map(([number, title, copy]) => (
-              <div
-                key={number}
-                className="lift rounded-2xl border border-[#e3ded8] bg-white p-6"
-              >
-                <span className="text-xs font-bold text-[#ff4f00]">
-                  {number}
+      <section className="border-y border-[#e7e2dd] bg-white px-5 py-7">
+        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-6 md:flex-row">
+          <p className="text-center text-sm font-medium text-[#817972] md:text-left">
+            Connect the tools that keep your business moving
+          </p>
+          <div className="flex flex-wrap items-center justify-center gap-x-7 gap-y-4">
+            {apps.map((app) => (
+              <div key={app.id} className="flex items-center gap-2.5">
+                <AppIcon app={app} size="sm" />
+                <span className="text-sm font-semibold text-[#4f4945]">
+                  {app.name}
                 </span>
-                <h3 className="mt-8 text-xl font-bold">{title}</h3>
-                <p className="mt-2 text-sm leading-6 text-[#6d6660]">{copy}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      <section
-        id="capabilities"
-        className="border-y border-[#e3ded8] bg-[#f7f5f2] px-5 py-24"
-      >
+      <section id="how-it-works" className="px-5 py-20 sm:py-24">
         <div className="mx-auto max-w-6xl">
-          <div className="mx-auto max-w-2xl text-center">
-            <p className="text-sm font-bold uppercase tracking-[0.14em] text-[#ff4f00]">
-              Start your way
+          <div className="max-w-2xl">
+            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-[#7c3aed]">
+              One clear flow
             </p>
-            <h2 className="mt-3 text-4xl font-black tracking-[-0.04em] sm:text-5xl">
-              More than webhook automation.
+            <h2 className="mt-3 text-4xl font-semibold tracking-[-0.045em] text-[#241f20] sm:text-5xl">
+              From signal to outcome.
             </h2>
-            <p className="mt-4 leading-7 text-[#6d6660]">
-              React instantly, run recurring work, or turn an API change into
-              the beginning of a workflow.
-            </p>
-          </div>
-          <div className="mt-12 grid gap-5 md:grid-cols-3">
-            {triggers.map((trigger) => (
-              <div
-                key={trigger.id}
-                className="lift rounded-2xl border border-[#e3ded8] bg-white p-7"
-              >
-                <AppIcon app={trigger} size="lg" />
-                <h3 className="mt-6 text-2xl font-bold">{trigger.name}</h3>
-                <p className="mt-3 leading-7 text-[#6d6660]">{trigger.text}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section id="apps" className="bg-[#2d2525] px-5 py-24 text-white">
-        <div className="mx-auto max-w-6xl">
-          <div className="flex flex-col justify-between gap-5 md:flex-row md:items-end">
-            <div>
-              <p className="text-sm font-bold uppercase tracking-[0.14em] text-[#d8a7ff]">
-                Integrations and actions
-              </p>
-              <h2 className="mt-3 max-w-2xl text-4xl font-black tracking-[-0.04em] sm:text-5xl">
-                Connect the tools your workflow needs.
-              </h2>
-            </div>
-            <p className="max-w-md leading-7 text-white/60">
-              Reuse encrypted connections for SMTP and HTTP, or connect Slack
-              and Google with OAuth.
+            <p className="mt-4 text-lg leading-8 text-[#6d6660]">
+              Everything you need to build, run, and understand your
+              automations—without the usual operational fog.
             </p>
           </div>
 
-          <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-            {integrations.map((app) => (
-              <div
-                key={app.id}
-                className="rounded-2xl border border-white/15 bg-white/5 p-6 text-left transition hover:-translate-y-0.5 hover:bg-white/10"
+          <div className="mt-12 grid gap-4 lg:grid-cols-3">
+            {features.map((feature) => (
+              <article
+                key={feature.number}
+                className="group rounded-2xl border border-[#e3ded8] bg-white p-7 transition duration-200 hover:-translate-y-1 hover:border-[#cfc6dc] hover:shadow-[0_16px_40px_rgba(50,35,65,0.08)] sm:p-8"
               >
-                <AppIcon app={app} size="lg" />
-                <h3 className="mt-5 text-lg font-bold">{app.name}</h3>
-                <p className="mt-2 text-sm leading-6 text-white/60">
-                  {app.text}
-                </p>
-              </div>
-            ))}
-          </div>
-
-          <div className="mt-12 rounded-3xl border border-white/15 bg-white/[0.04] p-6 sm:p-8">
-            <div className="mb-7 flex flex-col justify-between gap-2 sm:flex-row sm:items-end">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#ffb693]">
-                  Workflow logic
-                </p>
-                <h3 className="mt-2 text-2xl font-bold">
-                  Shape what happens between apps.
-                </h3>
-              </div>
-              <span className="text-sm text-white/50">
-                Five built-in blocks
-              </span>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-              {logicBlocks.map(([id, name, text]) => (
-                <div
-                  key={id}
-                  className="rounded-xl border border-white/10 bg-black/10 p-4"
-                >
-                  <div className="flex items-center gap-3">
-                    <AppIcon app={{ id, name }} size="sm" />
-                    <strong>{name}</strong>
-                  </div>
-                  <p className="mt-3 text-xs leading-5 text-white/55">{text}</p>
+                <div className="flex items-center justify-between">
+                  <AppIcon
+                    app={{ id: feature.icon, name: feature.title }}
+                    size="lg"
+                  />
+                  <span className="text-sm font-semibold text-[#a39a94]">
+                    {feature.number}
+                  </span>
                 </div>
-              ))}
-            </div>
+                <h3 className="mt-8 text-2xl font-semibold tracking-[-0.025em] text-[#2d2525]">
+                  {feature.title}
+                </h3>
+                <p className="mt-3 leading-7 text-[#6d6660]">{feature.copy}</p>
+              </article>
+            ))}
           </div>
         </div>
       </section>
 
-      <section id="reliability" className="mx-auto max-w-6xl px-5 py-24">
-        <div className="mx-auto max-w-2xl text-center">
-          <p className="text-sm font-bold uppercase tracking-[0.14em] text-[#ff4f00]">
-            Operations included
-          </p>
-          <h2 className="mt-3 text-4xl font-black tracking-[-0.04em] sm:text-5xl">
-            Built for the run after “publish.”
-          </h2>
-          <p className="mt-4 leading-7 text-[#6d6660]">
-            Building is only half the job. FlowForge gives you the history and
-            recovery tools to operate every workflow.
-          </p>
-        </div>
-        <div className="mt-12 grid gap-5 lg:grid-cols-3">
-          {operations.map((item) => (
-            <article
-              key={item.title}
-              className={`rounded-3xl border border-[#e3ded8] p-7 sm:p-8 ${item.tone}`}
-            >
-              <span className="text-xs font-bold uppercase tracking-[0.12em] text-[#6d6660]">
-                {item.eyebrow}
-              </span>
-              <h3 className="mt-8 text-2xl font-black tracking-[-0.03em]">
-                {item.title}
-              </h3>
-              <p className="mt-3 leading-7 text-[#6d6660]">{item.text}</p>
-            </article>
-          ))}
-        </div>
-        <div className="mt-5 grid gap-px overflow-hidden rounded-2xl border border-[#e3ded8] bg-[#e3ded8] sm:grid-cols-2 lg:grid-cols-4">
-          {[
-            ["Encrypted", "Stored connection secrets"],
-            ["Ordered", "Stage-by-stage execution"],
-            ["Idempotent", "Duplicate-safe webhooks"],
-            ["Redacted", "Sensitive run data"],
-          ].map(([title, copy]) => (
-            <div key={title} className="bg-white p-6">
-              <strong className="text-lg">{title}</strong>
-              <p className="mt-1 text-sm text-[#6d6660]">{copy}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="px-5 pb-24">
-        <div className="relative mx-auto max-w-6xl overflow-hidden rounded-[2rem] bg-[#2d2525] px-6 py-14 text-center text-white sm:px-12 sm:py-16">
-          <div className="absolute left-[-60px] top-[-80px] h-56 w-56 rounded-full bg-[#7c3aed] opacity-40 blur-3xl" />
-          <div className="absolute bottom-[-100px] right-[-40px] h-64 w-64 rounded-full bg-[#ec4899] opacity-35 blur-3xl" />
-          <div className="relative">
-            <p className="text-sm font-bold uppercase tracking-[0.14em] text-[#d8a7ff]">
-              Ready when you are
+      <section id="reliability" className="px-5 pb-20 sm:pb-24">
+        <div className="mx-auto grid max-w-6xl overflow-hidden rounded-[2rem] bg-[#282123] text-white lg:grid-cols-[0.9fr_1.1fr]">
+          <div className="flex flex-col justify-center px-7 py-12 sm:px-12 lg:px-14 lg:py-16">
+            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-[#d9b8ff]">
+              Built for real work
             </p>
-            <h2 className="mx-auto mt-4 max-w-3xl text-4xl font-black tracking-[-0.045em] sm:text-5xl">
-              Turn the next signal into a workflow.
+            <h2 className="mt-4 text-4xl font-semibold tracking-[-0.045em] sm:text-5xl">
+              Reliable when it matters.
             </h2>
-            <p className="mx-auto mt-4 max-w-xl leading-7 text-white/65">
-              Start from a template, connect your apps, and publish a workflow
-              you can actually observe.
+            <p className="mt-5 max-w-lg text-lg leading-8 text-white/65">
+              Publishing is only the beginning. FlowForge keeps execution
+              ordered, failures visible, and every workflow recoverable.
             </p>
             <Link
               href="/signup"
-              className="mt-8 inline-flex rounded-xl bg-white px-7 py-4 font-bold text-[#2d2525] transition hover:-translate-y-0.5 hover:bg-[#f5efff]"
+              className="mt-8 inline-flex w-fit items-center font-semibold text-white underline decoration-white/30 underline-offset-8 transition hover:decoration-white"
             >
-              Start building →
+              Build your first workflow
+              <ArrowRight />
             </Link>
+          </div>
+
+          <div className="grid gap-px bg-white/10 sm:grid-cols-2">
+            {[
+              ["01", "Automatic retries", "Temporary failures recover without manual work."],
+              ["02", "Complete run history", "Inspect every step, input, attempt, and result."],
+              ["03", "Version-safe replay", "Replay against the exact workflow that originally ran."],
+              ["04", "Protected connections", "Credentials stay encrypted and sensitive data is redacted."],
+            ].map(([number, title, copy]) => (
+              <div key={number} className="bg-white/[0.045] p-7 sm:p-8 lg:p-9">
+                <span className="text-xs font-semibold text-white/35">{number}</span>
+                <h3 className="mt-8 text-xl font-semibold">{title}</h3>
+                <p className="mt-2 text-sm leading-6 text-white/55">{copy}</p>
+              </div>
+            ))}
           </div>
         </div>
       </section>
 
-      <footer className="flex flex-col items-center justify-between gap-3 border-t border-[#e3ded8] px-6 py-8 text-sm text-[#6d6660] sm:flex-row">
-        <strong className="text-[#2d2525]">flowforge</strong>
-        <span>Event-driven automation, from trigger to outcome.</span>
+      <section className="border-t border-[#e7e2dd] bg-white px-5 py-20 text-center sm:py-24">
+        <div className="mx-auto max-w-3xl">
+          <h2 className="text-4xl font-semibold tracking-[-0.045em] text-[#241f20] sm:text-5xl">
+            Your next workflow starts here.
+          </h2>
+          <p className="mx-auto mt-4 max-w-xl text-lg leading-8 text-[#6d6660]">
+            Start from scratch or use a template. You can be running in minutes.
+          </p>
+          <Link
+            href="/signup"
+            className="mt-8 inline-flex items-center justify-center rounded-xl bg-[linear-gradient(115deg,#7c3aed,#c026d3_52%,#ec4899)] px-7 py-3.5 font-semibold text-white shadow-[0_10px_30px_rgba(124,58,237,0.22)] transition hover:-translate-y-0.5"
+          >
+            Get started free
+            <ArrowRight />
+          </Link>
+        </div>
+      </section>
+
+      <footer className="border-t border-[#e7e2dd] bg-white px-5 py-8">
+        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 text-sm text-[#817972] sm:flex-row">
+          <span className="font-semibold text-[#2d2525]">flowforge</span>
+          <span>Reliable automation, from trigger to outcome.</span>
+        </div>
       </footer>
     </main>
   );
 }
 
-function WorkflowCanvas() {
+function WorkflowPreview() {
   return (
-    <div className="soft-shadow relative rounded-3xl border border-[#d8d1ca] bg-white/90 p-5 backdrop-blur sm:p-7">
-      <div className="mb-6 flex items-center justify-between border-b border-[#eee9e4] pb-4">
-        <div>
-          <div className="font-bold">API change alert</div>
-          <div className="mt-1 text-xs text-[#7d756f]">
-            Published · Version 4
+    <div className="relative mx-auto w-full max-w-[500px]">
+      <div className="absolute -inset-6 rounded-[2.5rem] bg-[linear-gradient(135deg,rgba(124,58,237,0.15),rgba(236,72,153,0.08))] blur-2xl" />
+      <div className="relative rounded-[1.75rem] border border-[#ddd6d0] bg-white p-4 shadow-[0_24px_70px_rgba(54,38,47,0.14)] sm:p-5">
+        <div className="flex items-center justify-between border-b border-[#eee9e4] px-1 pb-4">
+          <div>
+            <p className="text-sm font-semibold text-[#2d2525]">New lead routing</p>
+            <p className="mt-1 text-xs text-[#8d8580]">Active · Updated 2m ago</p>
           </div>
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-[#e9f8ef] px-2.5 py-1 text-xs font-semibold text-[#17733d]">
+            <span className="h-1.5 w-1.5 rounded-full bg-[#22a258]" />
+            Live
+          </span>
         </div>
-        <span className="rounded-full bg-[#dff7e8] px-3 py-1 text-xs font-bold text-[#126b38]">
-          Live
-        </span>
-      </div>
 
-      <div className="space-y-0">
-        <WorkflowPreview
-          id="polling"
-          name="Polling"
-          label="When the API changes"
-          detail="Every 5 minutes"
-        />
-        <CanvasConnector label="response" />
-        <WorkflowPreview
-          id="transform"
-          name="Transform"
-          label="Shape the payload"
-          detail="Map 4 fields"
-        />
-        <CanvasConnector label="result" />
-        <WorkflowPreview
-          id="slack"
-          name="Slack"
-          label="Notify the team"
-          detail="#operations"
-        />
-      </div>
+        <div className="py-5">
+          <WorkflowStep id="webhook" name="Webhook" meta="New form submission" state="Trigger" />
+          <Connector />
+          <WorkflowStep id="filter" name="Qualified lead?" meta="Score is greater than 70" state="Condition" />
+          <Connector />
+          <WorkflowStep id="slack" name="Notify sales" meta="#new-leads" state="Action" />
+        </div>
 
-      <div className="mt-6 grid grid-cols-3 gap-2 border-t border-[#eee9e4] pt-5 text-center">
-        {[
-          ["248", "runs"],
-          ["99.2%", "success"],
-          ["1.4s", "median"],
-        ].map(([value, label]) => (
-          <div key={label} className="rounded-xl bg-[#f7f5f2] px-2 py-3">
-            <div className="font-black">{value}</div>
-            <div className="mt-1 text-[10px] uppercase tracking-wide text-[#7d756f]">
-              {label}
+        <div className="grid grid-cols-3 gap-2 border-t border-[#eee9e4] pt-4 text-center">
+          {[["1,284", "Runs"], ["99.7%", "Success"], ["1.2s", "Median"]].map(([value, label]) => (
+            <div key={label} className="rounded-xl bg-[#f7f5f2] px-2 py-3">
+              <p className="text-sm font-semibold text-[#2d2525]">{value}</p>
+              <p className="mt-0.5 text-[10px] font-medium uppercase tracking-wider text-[#938b85]">{label}</p>
             </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
     </div>
   );
 }
 
-function WorkflowPreview({
-  id,
-  name,
-  label,
-  detail,
-}: {
-  id: string;
-  name: string;
-  label: string;
-  detail: string;
-}) {
+function WorkflowStep({ id, name, meta, state }: { id: string; name: string; meta: string; state: string }) {
   return (
-    <div className="flex items-center gap-4 rounded-2xl border border-[#e3ded8] bg-white p-4 text-left">
+    <div className="flex items-center gap-3.5 rounded-2xl border border-[#e7e2dd] bg-white p-3.5 shadow-[0_3px_12px_rgba(45,37,37,0.04)] sm:p-4">
       <AppIcon app={{ id, name }} />
       <div className="min-w-0 flex-1">
-        <div className="text-[10px] font-bold uppercase tracking-wide text-[#8d8580]">
-          {label}
-        </div>
-        <div className="mt-1 font-bold">{name}</div>
+        <p className="font-semibold text-[#2d2525]">{name}</p>
+        <p className="mt-0.5 truncate text-xs text-[#817972]">{meta}</p>
       </div>
-      <span className="text-xs text-[#7d756f]">{detail}</span>
+      <span className="rounded-md bg-[#f3f0ed] px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#817972]">{state}</span>
     </div>
   );
 }
 
-function CanvasConnector({ label }: { label: string }) {
+function Connector() {
+  return <div className="ml-8 h-6 w-px bg-[#d5cec8]" />;
+}
+
+function ArrowRight() {
   return (
-    <div className="ml-9 flex h-10 items-center gap-2">
-      <span className="h-full w-px bg-[#cfc8c1]" />
-      <span className="rounded-full bg-[#f1eeea] px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[#7d756f]">
-        {label}
-      </span>
-    </div>
+    <svg viewBox="0 0 20 20" fill="none" className="ml-2 h-4 w-4" aria-hidden="true">
+      <path d="M4 10h12m-4.5-4.5L16 10l-4.5 4.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }
