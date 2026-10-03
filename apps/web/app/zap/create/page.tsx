@@ -272,8 +272,8 @@ function CreateZapContent() {
   }
 
   return (
-    <main className="min-h-screen bg-[#f7f5f2]">
-      <header className="fixed inset-x-0 top-0 z-30 flex h-16 items-center justify-between border-b border-[#d8d1ca] bg-white px-4 sm:px-6">
+    <main className="min-h-screen bg-[#f6f7f9] [font-family:var(--font-geist-sans)]">
+      <header className="fixed inset-x-0 top-0 z-30 flex h-[72px] items-center justify-between border-b border-[#e8e5e1] bg-white/95 px-4 backdrop-blur-xl sm:px-6">
         <div className="flex items-center gap-4">
           <Brand compact />
           <span className="hidden h-6 w-px bg-[#d8d1ca] sm:block" />
@@ -313,14 +313,14 @@ function CreateZapContent() {
           <button
             onClick={() => save("draft")}
             disabled={savingMode !== null || loading}
-            className="rounded-lg border border-[#bdb5ae] bg-white px-4 py-2.5 text-sm font-bold hover:bg-[#f7f5f2] disabled:opacity-50"
+            className="rounded-xl border border-[#d8d1ca] bg-white px-4 py-2.5 text-sm font-semibold transition hover:border-[#bdb5ae] hover:bg-[#f7f5f2] disabled:opacity-50"
           >
             {savingMode === "draft" ? "Saving…" : "Save draft"}
           </button>
           <button
             onClick={() => save("publish")}
             disabled={savingMode !== null || loading}
-            className="rounded-lg bg-[#ff4f00] px-5 py-2.5 text-sm font-bold text-white hover:bg-[#d94100] disabled:opacity-50"
+            className="rounded-xl bg-[#2d2525] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#171313] disabled:opacity-50"
           >
             {savingMode === "publish" ? "Publishing…" : "Publish"}
           </button>

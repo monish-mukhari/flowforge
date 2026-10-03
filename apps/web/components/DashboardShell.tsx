@@ -207,9 +207,9 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <div className="min-h-screen bg-[#f7f5f2]">
+    <div className="app-shell min-h-screen bg-[#f6f7f9] [font-family:var(--font-geist-sans)]">
       <aside
-        className={`fixed inset-y-0 left-0 z-20 hidden border-r border-[#e3ded8] bg-white transition-[width] duration-200 md:flex md:flex-col ${sidebarCollapsed ? "w-20 p-3" : "w-60 p-5"}`}
+        className={`fixed inset-y-0 left-0 z-20 hidden border-r border-[#e8e5e1] bg-white transition-[width] duration-200 md:flex md:flex-col ${sidebarCollapsed ? "w-[72px] px-3 py-5" : "w-[248px] px-4 py-5"}`}
       >
         <div
           className={`flex items-center ${sidebarCollapsed ? "justify-center" : "justify-between gap-3"}`}
@@ -218,7 +218,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           <button
             type="button"
             onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[#6d6660] hover:bg-[#f7f5f2] hover:text-[#2d2525]"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-[#817972] transition hover:bg-[#f3f1ef] hover:text-[#2d2525]"
             aria-label={
               sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"
             }
@@ -230,16 +230,16 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         </div>
         <Link
           href="/zap/create"
-          className={`mt-8 flex items-center justify-center gap-2 rounded-lg bg-[#ff4f00] py-3 text-sm font-bold text-white hover:bg-[#d94100] ${sidebarCollapsed ? "px-0" : "px-4"}`}
+          className={`mt-8 flex h-11 items-center justify-center gap-2 rounded-xl bg-[#2d2525] text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-[#171313] ${sidebarCollapsed ? "px-0" : "px-4"}`}
           title={sidebarCollapsed ? "Create workflow" : undefined}
         >
           <span className="text-xl leading-none">+</span>
           {!sidebarCollapsed && "Create workflow"}
         </Link>
-        <nav className="mt-7 space-y-1 text-sm font-semibold">
+        <nav className="mt-7 space-y-1.5 text-sm font-medium text-[#625b56]">
           <Link
             href="/dashboard"
-            className={`flex items-center gap-3 rounded-lg py-2.5 ${sidebarCollapsed ? "justify-center px-0" : "px-3"} ${pathname === "/dashboard" ? "bg-[#f1eeea]" : "hover:bg-[#f7f5f2]"}`}
+            className={`flex items-center gap-3 rounded-xl py-2.5 transition ${sidebarCollapsed ? "justify-center px-0" : "px-3"} ${pathname === "/dashboard" ? "bg-[#f1ecfa] font-semibold text-[#6d28d9]" : "hover:bg-[#f6f4f2] hover:text-[#2d2525]"}`}
             title={sidebarCollapsed ? "My workflows" : undefined}
           >
             <NavIcon name="workflow" />
@@ -247,7 +247,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           </Link>
           <Link
             href="/runs"
-            className={`flex items-center gap-3 rounded-lg py-2.5 ${sidebarCollapsed ? "justify-center px-0" : "px-3"} ${pathname === "/runs" ? "bg-[#f1eeea]" : "hover:bg-[#f7f5f2]"}`}
+            className={`flex items-center gap-3 rounded-xl py-2.5 transition ${sidebarCollapsed ? "justify-center px-0" : "px-3"} ${pathname === "/runs" ? "bg-[#f1ecfa] font-semibold text-[#6d28d9]" : "hover:bg-[#f6f4f2] hover:text-[#2d2525]"}`}
             title={sidebarCollapsed ? "Run history" : undefined}
           >
             <NavIcon name="history" />
@@ -255,24 +255,24 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           </Link>
           <Link
             href="/connections"
-            className={`flex items-center gap-3 rounded-lg py-2.5 ${sidebarCollapsed ? "justify-center px-0" : "px-3"} ${pathname === "/connections" ? "bg-[#f1eeea]" : "hover:bg-[#f7f5f2]"}`}
+            className={`flex items-center gap-3 rounded-xl py-2.5 transition ${sidebarCollapsed ? "justify-center px-0" : "px-3"} ${pathname === "/connections" ? "bg-[#f1ecfa] font-semibold text-[#6d28d9]" : "hover:bg-[#f6f4f2] hover:text-[#2d2525]"}`}
             title={sidebarCollapsed ? "Connections" : undefined}
           >
             <NavIcon name="connections" />
             {!sidebarCollapsed && "Connections"}
           </Link>
-          <Link href="/templates" className={`flex items-center gap-3 rounded-lg py-2.5 ${sidebarCollapsed ? "justify-center px-0" : "px-3"} ${pathname === "/templates" ? "bg-[#f1eeea]" : "hover:bg-[#f7f5f2]"}`} title={sidebarCollapsed ? "Templates" : undefined}>
+          <Link href="/templates" className={`flex items-center gap-3 rounded-xl py-2.5 transition ${sidebarCollapsed ? "justify-center px-0" : "px-3"} ${pathname === "/templates" ? "bg-[#f1ecfa] font-semibold text-[#6d28d9]" : "hover:bg-[#f6f4f2] hover:text-[#2d2525]"}`} title={sidebarCollapsed ? "Templates" : undefined}>
             <NavIcon name="templates" />{!sidebarCollapsed && "Templates"}
           </Link>
-          <Link href="/crypto" className={`flex items-center gap-3 rounded-lg py-2.5 ${sidebarCollapsed ? "justify-center px-0" : "px-3"} ${pathname === "/crypto" ? "bg-[#f1eeea]" : "hover:bg-[#f7f5f2]"}`} title={sidebarCollapsed ? "Crypto settings" : undefined}>
+          <Link href="/crypto" className={`flex items-center gap-3 rounded-xl py-2.5 transition ${sidebarCollapsed ? "justify-center px-0" : "px-3"} ${pathname === "/crypto" ? "bg-[#f1ecfa] font-semibold text-[#6d28d9]" : "hover:bg-[#f6f4f2] hover:text-[#2d2525]"}`} title={sidebarCollapsed ? "Crypto settings" : undefined}>
             <NavIcon name="crypto" />{!sidebarCollapsed && "Crypto settings"}
           </Link>
-          <Link href="/workspace" className={`flex items-center gap-3 rounded-lg py-2.5 ${sidebarCollapsed ? "justify-center px-0" : "px-3"} ${pathname === "/workspace" ? "bg-[#f1eeea]" : "hover:bg-[#f7f5f2]"}`} title={sidebarCollapsed ? "Workspace" : undefined}>
+          <Link href="/workspace" className={`flex items-center gap-3 rounded-xl py-2.5 transition ${sidebarCollapsed ? "justify-center px-0" : "px-3"} ${pathname === "/workspace" ? "bg-[#f1ecfa] font-semibold text-[#6d28d9]" : "hover:bg-[#f6f4f2] hover:text-[#2d2525]"}`} title={sidebarCollapsed ? "Workspace" : undefined}>
             <NavIcon name="workspace" />{!sidebarCollapsed && "Workspace"}
           </Link>
         </nav>
         <div
-          className={`mt-auto rounded-xl bg-[#f7f5f2] text-xs leading-5 text-[#6d6660] ${sidebarCollapsed ? "p-2 text-center" : "p-4"}`}
+          className={`mt-auto rounded-2xl border border-[#ebe7e3] bg-[#faf9f7] text-xs leading-5 text-[#6d6660] ${sidebarCollapsed ? "p-2 text-center" : "p-4"}`}
           title={sidebarCollapsed ? "Versioned connector platform" : undefined}
         >
           <strong className="block text-sm text-[#2d2525]">
@@ -294,16 +294,16 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         </button>
       </aside>
       <div
-        className={`transition-[padding] duration-200 ${sidebarCollapsed ? "md:pl-20" : "md:pl-60"}`}
+        className={`min-h-screen pb-20 transition-[padding] duration-200 md:pb-0 ${sidebarCollapsed ? "md:pl-[72px]" : "md:pl-[248px]"}`}
       >
-        <header className="relative sticky top-0 z-10 flex h-16 items-center justify-between border-b border-[#e3ded8] bg-white/95 px-5 backdrop-blur md:px-8">
+        <header className="relative sticky top-0 z-10 flex h-[72px] items-center justify-between border-b border-[#e8e5e1] bg-white/90 px-5 backdrop-blur-xl md:px-8">
           <div className="md:hidden">
             <Brand compact />
           </div>
           <button
             type="button"
             onClick={() => setSearchOpen(true)}
-            className="absolute left-1/2 hidden h-10 w-[min(380px,42vw)] -translate-x-1/2 items-center gap-2 rounded-lg border border-[#d9d3cc] bg-[#faf9f7] px-3 text-left text-sm text-[#817972] shadow-sm transition hover:border-[#aaa19a] hover:bg-white md:flex"
+            className="absolute left-1/2 hidden h-10 w-[min(420px,42vw)] -translate-x-1/2 items-center gap-2 rounded-xl border border-[#ddd8d3] bg-[#f8f7f5] px-3 text-left text-sm text-[#817972] transition hover:border-[#bfb6af] hover:bg-white md:flex"
             aria-label="Search workspace"
           >
             <NavIcon name="search" />
@@ -401,6 +401,24 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         )}
         {children}
       </div>
+      <nav className="fixed inset-x-3 bottom-3 z-30 grid grid-cols-5 rounded-2xl border border-[#e2ddd8] bg-white/95 p-1.5 shadow-[0_12px_40px_rgba(45,37,37,0.14)] backdrop-blur-xl md:hidden">
+        {([
+          ["/dashboard", "workflow", "Workflows"],
+          ["/runs", "history", "Runs"],
+          ["/connections", "connections", "Connect"],
+          ["/templates", "templates", "Templates"],
+          ["/workspace", "workspace", "Team"],
+        ] as const).map(([href, icon, label]) => (
+          <Link
+            key={href}
+            href={href}
+            className={`flex min-w-0 flex-col items-center gap-1 rounded-xl px-1 py-2 text-[10px] font-semibold transition ${pathname === href ? "bg-[#f1ecfa] text-[#6d28d9]" : "text-[#817972]"}`}
+          >
+            <NavIcon name={icon} />
+            <span className="truncate">{label}</span>
+          </Link>
+        ))}
+      </nav>
     </div>
   );
 }

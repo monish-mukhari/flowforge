@@ -120,13 +120,13 @@ export default function RunHistoryPage() {
 
   return (
     <DashboardShell>
-      <main className="mx-auto max-w-7xl p-5 md:p-8 lg:p-10">
+      <main className="mx-auto max-w-7xl px-4 py-7 sm:px-6 md:px-8 md:py-10">
         <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
           <div>
-            <p className="text-sm font-bold uppercase tracking-[0.14em] text-[#ff4f00]">
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#7c3aed]">
               Operations
             </p>
-            <h1 className="mt-1 text-4xl font-black tracking-[-0.045em]">
+            <h1 className="mt-2 text-3xl font-bold tracking-[-0.045em] sm:text-4xl">
               Run history
             </h1>
             <p className="mt-2 text-[#6d6660]">

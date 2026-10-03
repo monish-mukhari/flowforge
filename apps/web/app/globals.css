@@ -147,3 +147,42 @@ html.dark .bg-\[\#faf8f5\] {
 .fade-up {
   animation: fade-up 420ms ease both;
 }
+
+/* Authenticated product surfaces share a quieter, denser application system. */
+.app-shell {
+  color: #2d2525;
+  font-feature-settings: "ss02" 1;
+}
+
+.app-shell .font-black {
+  font-weight: 700;
+}
+
+.app-shell input,
+.app-shell textarea,
+.app-shell select {
+  transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
+}
+
+.app-shell input:focus,
+.app-shell textarea:focus,
+.app-shell select:focus {
+  border-color: #8b5cf6;
+  box-shadow: 0 0 0 3px rgb(124 58 237 / 0.1);
+  outline: none;
+}
+
+.app-shell button,
+.app-shell a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-shell *,
+  .app-shell *::before,
+  .app-shell *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}

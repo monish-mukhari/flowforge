@@ -210,14 +210,14 @@ export default function WorkspacePage() {
 
   return (
     <DashboardShell>
-      <main className="mx-auto max-w-6xl p-5 md:p-8 lg:p-10">
-        <p className="text-sm font-bold uppercase tracking-[0.14em] text-[#503eb6]">
+      <main className="mx-auto max-w-7xl px-4 py-7 sm:px-6 md:px-8 md:py-10">
+        <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#7c3aed]">
           Workspace
         </p>
-        <h1 className="mt-1 text-4xl font-black tracking-[-0.045em]">
+        <h1 className="mt-2 text-3xl font-bold tracking-[-0.045em] sm:text-4xl">
           People, access and shared assets
         </h1>
-        <p className="mt-3 text-[#6d6660]">
+        <p className="mt-3 max-w-2xl text-sm leading-6 text-[#6d6660] sm:text-base">
           A workflow or connection appears here only after its owner explicitly
           shares it with this workspace.
         </p>

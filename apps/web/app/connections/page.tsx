@@ -143,14 +143,14 @@ function ConnectionsPageContent() {
   const oauthError = searchParams.get("error");
   return (
     <DashboardShell>
-      <main className="mx-auto max-w-6xl p-5 md:p-8 lg:p-10">
-        <p className="text-sm font-bold uppercase tracking-[0.14em] text-[#ff4f00]">
+      <main className="mx-auto max-w-7xl px-4 py-7 sm:px-6 md:px-8 md:py-10">
+        <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#7c3aed]">
           Connector platform
         </p>
-        <h1 className="mt-1 text-4xl font-black tracking-[-0.045em]">
+        <h1 className="mt-2 text-3xl font-bold tracking-[-0.045em] sm:text-4xl">
           Connections
         </h1>
-        <p className="mt-2 text-[#6d6660]">
+        <p className="mt-3 max-w-2xl text-sm leading-6 text-[#6d6660] sm:text-base">
           Connect once, test securely, and reuse credentials across workflows.
           Secrets are encrypted and never returned to the browser.
         </p>
@@ -171,7 +171,7 @@ function ConnectionsPageContent() {
             .map((connector) => (
               <div
                 key={connector.id}
-                className="rounded-2xl border border-[#e3ded8] bg-white p-5"
+                className="rounded-2xl border border-[#e3ded8] bg-white p-5 shadow-[0_3px_14px_rgba(45,37,37,0.035)] transition hover:-translate-y-0.5 hover:border-[#cfc6dc] hover:shadow-[0_14px_35px_rgba(50,35,65,0.07)]"
               >
                 <AppIcon app={connector} size="lg" />
                 <h2 className="mt-3 font-black">
