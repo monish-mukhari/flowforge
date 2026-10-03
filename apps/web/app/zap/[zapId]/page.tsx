@@ -32,6 +32,7 @@ export default function ZapDetails() {
   >([]);
   const [shareOrganizationId, setShareOrganizationId] = useState("");
   const [shareMenuOpen, setShareMenuOpen] = useState(false);
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -237,7 +238,7 @@ export default function ZapDetails() {
 
   return (
     <DashboardShell>
-      <main className="mx-auto max-w-5xl p-5 md:p-8 lg:p-10">
+      <main className="mx-auto w-full max-w-7xl p-4 sm:p-6 lg:p-8 xl:p-10">
         <Link
           href="/dashboard"
           className="text-sm font-bold text-[#6d6660] hover:text-black"
@@ -254,232 +255,297 @@ export default function ZapDetails() {
         )}
         {zap && (
           <>
-            <div className="mt-6 flex flex-col justify-between gap-5 sm:flex-row sm:items-start">
-              <div>
-                <div className="flex items-center gap-3">
-                  <h1 className="text-4xl font-black tracking-[-0.045em]">
-                    {editing ? (
-                      <input
-                        value={draftName}
-                        onChange={(event) => setDraftName(event.target.value)}
-                        className="rounded-md border border-[#d8d1ca] px-2 py-1 text-3xl font-black"
-                      />
-                    ) : (
-                      zap.name
-                    )}
-                  </h1>
-                  <span className="rounded-full bg-[#eee9ff] px-3 py-1 text-xs font-bold text-[#503eb6]">
-                    {zap.status}
-                  </span>
+            <section className="mt-5 overflow-visible rounded-2xl border border-[#e3ded8] bg-white shadow-[0_1px_2px_rgba(45,37,37,0.04)]">
+              <div className="flex flex-col gap-6 p-5 sm:p-7 lg:flex-row lg:items-start lg:justify-between">
+                <div className="min-w-0 flex-1">
+                  <div className="mb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[#8d8580]">
+                    Workflow
+                  </div>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <h1 className="min-w-0 text-3xl font-black tracking-[-0.04em] sm:text-4xl">
+                      {editing ? (
+                        <input
+                          value={draftName}
+                          onChange={(event) => setDraftName(event.target.value)}
+                          className="w-full max-w-xl rounded-lg border border-[#d8d1ca] px-3 py-2 text-2xl font-black sm:text-3xl"
+                        />
+                      ) : (
+                        zap.name
+                      )}
+                    </h1>
+                    <WorkflowStatus status={zap.status} />
+                  </div>
+                  {!editing && zap.description && (
+                    <p className="mt-3 max-w-2xl text-sm leading-6 text-[#6d6660]">
+                      {zap.description}
+                    </p>
+                  )}
+                  {editing && (
+                    <textarea
+                      value={draftDescription}
+                      onChange={(event) =>
+                        setDraftDescription(event.target.value)
+                      }
+                      placeholder="Describe what this workflow does"
+                      className="mt-4 w-full max-w-2xl rounded-lg border border-[#d8d1ca] p-3 text-sm"
+                      rows={2}
+                    />
+                  )}
+                  <p className="mt-3 truncate font-mono text-[11px] text-[#8d8580]">
+                    ID: {zap.id}
+                  </p>
                 </div>
-                <p className="mt-2 font-mono text-xs text-[#8d8580]">
-                  {zap.id}
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {!editing && canManage && organizations.length > 0 && (
-                  <div
-                    className="relative flex items-center gap-2 rounded-xl border border-[#d8d1ca] bg-white p-1.5 shadow-sm transition focus-within:border-[#8d7ce0] focus-within:ring-4 focus-within:ring-[#eee9ff]"
-                    onBlur={(event) => {
-                      if (!event.currentTarget.contains(event.relatedTarget))
-                        setShareMenuOpen(false);
-                    }}
-                  >
-                    <button
-                      type="button"
-                      aria-haspopup="listbox"
-                      aria-expanded={shareMenuOpen}
-                      onClick={() => setShareMenuOpen((open) => !open)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Escape") setShareMenuOpen(false);
+                <div className="flex shrink-0 flex-wrap items-center gap-2 lg:max-w-md lg:justify-end">
+                  {!editing && canManage && organizations.length > 0 && (
+                    <div
+                      className="relative order-last mt-3 flex basis-full items-center gap-2 rounded-xl border border-[#d8d1ca] bg-[#faf8f5] p-1.5 transition focus-within:border-[#8d7ce0] focus-within:ring-4 focus-within:ring-[#eee9ff]"
+                      onBlur={(event) => {
+                        if (!event.currentTarget.contains(event.relatedTarget))
+                          setShareMenuOpen(false);
                       }}
-                      className="flex min-w-48 items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition hover:bg-[#f7f5f2]"
                     >
-                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#eee9ff] text-[#503eb6]">
+                      <button
+                        type="button"
+                        aria-haspopup="listbox"
+                        aria-expanded={shareMenuOpen}
+                        onClick={() => setShareMenuOpen((open) => !open)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Escape") setShareMenuOpen(false);
+                        }}
+                        className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition hover:bg-white"
+                      >
+                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#eee9ff] text-[#503eb6]">
+                          <svg
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.8"
+                            className="h-4 w-4"
+                            aria-hidden="true"
+                          >
+                            <path d="M4 20V7l8-4 8 4v13M8 20v-5h8v5M8 9h.01M12 9h.01M16 9h.01M8 12h.01M12 12h.01M16 12h.01" />
+                          </svg>
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-[10px] font-bold uppercase tracking-[0.1em] text-[#8d8580]">
+                            Workspace
+                          </span>
+                          <span className="block max-w-36 truncate text-xs font-bold text-[#2d2525]">
+                            {selectedShareOrganization?.name ??
+                              "Choose workspace"}
+                          </span>
+                        </span>
                         <svg
-                          viewBox="0 0 24 24"
+                          viewBox="0 0 20 20"
                           fill="none"
                           stroke="currentColor"
-                          strokeWidth="1.8"
-                          className="h-4 w-4"
+                          strokeWidth="2"
+                          className={`h-4 w-4 shrink-0 text-[#8d8580] transition ${shareMenuOpen ? "rotate-180" : ""}`}
                           aria-hidden="true"
                         >
-                          <path d="M4 20V7l8-4 8 4v13M8 20v-5h8v5M8 9h.01M12 9h.01M16 9h.01M8 12h.01M12 12h.01M16 12h.01" />
+                          <path d="m5 7.5 5 5 5-5" />
                         </svg>
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block text-[10px] font-bold uppercase tracking-[0.1em] text-[#8d8580]">
-                          Workspace
-                        </span>
-                        <span className="block max-w-36 truncate text-xs font-bold text-[#2d2525]">
-                          {selectedShareOrganization?.name ??
-                            "Choose workspace"}
-                        </span>
-                      </span>
-                      <svg
-                        viewBox="0 0 20 20"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        className={`h-4 w-4 shrink-0 text-[#8d8580] transition ${shareMenuOpen ? "rotate-180" : ""}`}
-                        aria-hidden="true"
-                      >
-                        <path d="m5 7.5 5 5 5-5" />
-                      </svg>
-                    </button>
-                    {shareMenuOpen && (
-                      <div
-                        role="listbox"
-                        aria-label="Choose a workspace"
-                        className="absolute left-0 top-[calc(100%+8px)] z-40 w-72 overflow-hidden rounded-2xl border border-[#ddd6cf] bg-white p-2 shadow-[0_18px_45px_rgba(45,37,37,0.18)]"
-                      >
-                        <div className="px-3 pb-2 pt-1">
-                          <p className="text-xs font-black text-[#2d2525]">
-                            Share to a workspace
-                          </p>
-                          <p className="mt-0.5 text-[11px] leading-4 text-[#8d8580]">
-                            Members will receive access based on their role.
-                          </p>
-                        </div>
-                        <div className="max-h-56 space-y-1 overflow-y-auto">
-                          {organizations.map((organization) => {
-                            const selected =
-                              organization.id === shareOrganizationId;
-                            return (
-                              <button
-                                key={organization.id}
-                                type="button"
-                                role="option"
-                                aria-selected={selected}
-                                onClick={() => {
-                                  setShareOrganizationId(organization.id);
-                                  setShareMenuOpen(false);
-                                }}
-                                className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition ${selected ? "bg-[#eee9ff] text-[#503eb6]" : "hover:bg-[#f7f5f2]"}`}
-                              >
-                                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#f1eeea] text-xs font-black">
-                                  {organization.name.charAt(0).toUpperCase()}
-                                </span>
-                                <span className="min-w-0 flex-1">
-                                  <span className="block truncate text-sm font-bold">
-                                    {organization.name}
+                      </button>
+                      {shareMenuOpen && (
+                        <div
+                          role="listbox"
+                          aria-label="Choose a workspace"
+                          className="absolute right-0 top-[calc(100%+8px)] z-40 w-72 overflow-hidden rounded-xl border border-[#ddd6cf] bg-white p-2 shadow-[0_18px_45px_rgba(45,37,37,0.18)]"
+                        >
+                          <div className="px-3 pb-2 pt-1">
+                            <p className="text-xs font-black text-[#2d2525]">
+                              Share to a workspace
+                            </p>
+                            <p className="mt-0.5 text-[11px] leading-4 text-[#8d8580]">
+                              Members will receive access based on their role.
+                            </p>
+                          </div>
+                          <div className="max-h-56 space-y-1 overflow-y-auto">
+                            {organizations.map((organization) => {
+                              const selected =
+                                organization.id === shareOrganizationId;
+                              return (
+                                <button
+                                  key={organization.id}
+                                  type="button"
+                                  role="option"
+                                  aria-selected={selected}
+                                  onClick={() => {
+                                    setShareOrganizationId(organization.id);
+                                    setShareMenuOpen(false);
+                                  }}
+                                  className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition ${selected ? "bg-[#eee9ff] text-[#503eb6]" : "hover:bg-[#f7f5f2]"}`}
+                                >
+                                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#f1eeea] text-xs font-black">
+                                    {organization.name.charAt(0).toUpperCase()}
                                   </span>
-                                  <span className="block text-[10px] font-bold uppercase tracking-wide opacity-60">
-                                    {organization.role}
+                                  <span className="min-w-0 flex-1">
+                                    <span className="block truncate text-sm font-bold">
+                                      {organization.name}
+                                    </span>
+                                    <span className="block text-[10px] font-bold uppercase tracking-wide opacity-60">
+                                      {organization.role}
+                                    </span>
                                   </span>
-                                </span>
-                                {selected && (
-                                  <svg
-                                    viewBox="0 0 20 20"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="2.2"
-                                    className="h-4 w-4"
-                                    aria-hidden="true"
-                                  >
-                                    <path d="m4 10 4 4 8-8" />
-                                  </svg>
-                                )}
-                              </button>
-                            );
-                          })}
+                                  {selected && (
+                                    <svg
+                                      viewBox="0 0 20 20"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      strokeWidth="2.2"
+                                      className="h-4 w-4"
+                                      aria-hidden="true"
+                                    >
+                                      <path d="m4 10 4 4 8-8" />
+                                    </svg>
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      )}
+                      <button
+                        onClick={() => void shareWorkflow()}
+                        disabled={!shareOrganizationId || !!busyAction}
+                        className="rounded-lg bg-[#503eb6] px-3.5 py-2.5 text-xs font-bold text-white transition hover:bg-[#42319f] disabled:cursor-not-allowed disabled:bg-[#d8d1ca]"
+                      >
+                        {busyAction === "share" ? "Sharing…" : "Share"}
+                      </button>
+                    </div>
+                  )}
+                  {editing ? (
+                    <>
+                      <button
+                        onClick={() => {
+                          setEditing(false);
+                          setDraftName(zap.name);
+                          setDraftDescription(zap.description ?? "");
+                        }}
+                        disabled={!!busyAction}
+                        className="rounded-lg border border-[#d8d1ca] bg-white px-4 py-2.5 text-sm font-bold transition hover:bg-[#f7f5f2] disabled:opacity-50"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={saveDetails}
+                        disabled={!!busyAction}
+                        className="rounded-lg bg-[#503eb6] px-4 py-2.5 text-sm font-bold text-white transition hover:bg-[#42319f] disabled:opacity-50"
+                      >
+                        Save changes
+                      </button>
+                    </>
+                  ) : (
+                    canEdit &&
+                    zap.status !== "ARCHIVED" && (
+                      <button
+                        onClick={() => lifecycle("publish")}
+                        disabled={!!busyAction}
+                        className="rounded-lg bg-[#ff4f00] px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:brightness-95 disabled:opacity-50"
+                      >
+                        {busyAction === "publish"
+                          ? "Publishing…"
+                          : "Publish version"}
+                      </button>
+                    )
+                  )}
+                  {!editing && canEdit && zap.status !== "ARCHIVED" && (
                     <button
-                      onClick={() => void shareWorkflow()}
-                      disabled={!shareOrganizationId || !!busyAction}
-                      className="rounded-lg bg-[#503eb6] px-3.5 py-2.5 text-xs font-bold text-white transition hover:bg-[#42319f] disabled:cursor-not-allowed disabled:bg-[#d8d1ca]"
+                      onClick={() => router.push(`/zap/create?edit=${zap.id}`)}
+                      className="rounded-lg border border-[#d8d1ca] bg-white px-4 py-2.5 text-sm font-bold transition hover:bg-[#f7f5f2]"
                     >
-                      {busyAction === "share" ? "Sharing…" : "Share"}
+                      Edit workflow
                     </button>
-                  </div>
-                )}
-                {editing ? (
-                  <button
-                    onClick={saveDetails}
-                    disabled={!!busyAction}
-                    className="rounded-xl bg-[#503eb6] px-4 py-2.5 text-sm font-bold text-white"
-                  >
-                    Save changes
-                  </button>
-                ) : (
-                  canEdit &&
-                  zap.status !== "ARCHIVED" && (
+                  )}
+                  {canEdit && zap.status === "PUBLISHED" && (
                     <button
-                      onClick={() => lifecycle("publish")}
+                      onClick={() => lifecycle("pause")}
                       disabled={!!busyAction}
-                      className="rounded-xl bg-[#ff4f00] px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50"
+                      className="rounded-lg border border-[#d8d1ca] bg-white px-4 py-2.5 text-sm font-bold transition hover:bg-[#f7f5f2]"
                     >
-                      {busyAction === "publish"
-                        ? "Publishing…"
-                        : "Publish version"}
+                      Pause
                     </button>
-                  )
-                )}
-                {!editing && canEdit && zap.status !== "ARCHIVED" && (
-                  <button
-                    onClick={() => router.push(`/zap/create?edit=${zap.id}`)}
-                    className="rounded-xl border border-[#bdb5ae] bg-white px-4 py-2.5 text-sm font-bold"
-                  >
-                    Edit
-                  </button>
-                )}
-                {canEdit && zap.status === "PUBLISHED" && (
-                  <button
-                    onClick={() => lifecycle("pause")}
-                    disabled={!!busyAction}
-                    className="rounded-xl border border-[#bdb5ae] bg-white px-4 py-2.5 text-sm font-bold"
-                  >
-                    Pause
-                  </button>
-                )}
-                {canEdit && zap.status === "PAUSED" && (
-                  <button
-                    onClick={() => lifecycle("resume")}
-                    disabled={!!busyAction}
-                    className="rounded-xl border border-[#bdb5ae] bg-white px-4 py-2.5 text-sm font-bold"
-                  >
-                    Resume
-                  </button>
-                )}
-                <button
-                  onClick={duplicate}
-                  disabled={!!busyAction}
-                  className="rounded-xl border border-[#bdb5ae] bg-white px-4 py-2.5 text-sm font-bold"
-                >
-                  Duplicate
-                </button>
-                {canManage && zap.status !== "ARCHIVED" && (
-                  <button
-                    onClick={() => lifecycle("archive")}
-                    disabled={!!busyAction}
-                    className="rounded-xl border border-red-200 bg-white px-4 py-2.5 text-sm font-bold text-red-700"
-                  >
-                    Archive
-                  </button>
-                )}
-                {canManage && (
-                  <button
-                    onClick={() => setConfirmDelete(true)}
-                    disabled={!!busyAction}
-                    className="rounded-xl border border-red-200 bg-white px-4 py-2.5 text-sm font-bold text-red-700 hover:bg-red-50 disabled:opacity-50"
-                  >
-                    {busyAction === "delete" ? "Deleting…" : "Delete"}
-                  </button>
-                )}
+                  )}
+                  {canEdit && zap.status === "PAUSED" && (
+                    <button
+                      onClick={() => lifecycle("resume")}
+                      disabled={!!busyAction}
+                      className="rounded-lg border border-[#d8d1ca] bg-white px-4 py-2.5 text-sm font-bold transition hover:bg-[#f7f5f2]"
+                    >
+                      Resume
+                    </button>
+                  )}
+                  {!editing && (
+                    <div
+                      className="relative"
+                      onBlur={(event) => {
+                        if (!event.currentTarget.contains(event.relatedTarget))
+                          setMoreMenuOpen(false);
+                      }}
+                    >
+                      <button
+                        type="button"
+                        aria-haspopup="menu"
+                        aria-expanded={moreMenuOpen}
+                        onClick={() => setMoreMenuOpen((open) => !open)}
+                        className="flex h-10 w-10 items-center justify-center rounded-lg border border-[#d8d1ca] bg-white text-xl font-bold transition hover:bg-[#f7f5f2]"
+                        aria-label="More workflow actions"
+                      >
+                        <span aria-hidden="true">⋯</span>
+                      </button>
+                      {moreMenuOpen && (
+                        <div
+                          role="menu"
+                          className="absolute right-0 top-[calc(100%+8px)] z-40 w-52 rounded-xl border border-[#ddd6cf] bg-white p-1.5 shadow-[0_18px_45px_rgba(45,37,37,0.16)]"
+                        >
+                          <button
+                            role="menuitem"
+                            onClick={() => {
+                              setMoreMenuOpen(false);
+                              void duplicate();
+                            }}
+                            disabled={!!busyAction}
+                            className="w-full rounded-lg px-3 py-2.5 text-left text-sm font-bold hover:bg-[#f7f5f2] disabled:opacity-50"
+                          >
+                            Duplicate workflow
+                          </button>
+                          {canManage && zap.status !== "ARCHIVED" && (
+                            <button
+                              role="menuitem"
+                              onClick={() => {
+                                setMoreMenuOpen(false);
+                                void lifecycle("archive");
+                              }}
+                              disabled={!!busyAction}
+                              className="w-full rounded-lg px-3 py-2.5 text-left text-sm font-bold hover:bg-[#f7f5f2] disabled:opacity-50"
+                            >
+                              Archive workflow
+                            </button>
+                          )}
+                          {canManage && (
+                            <>
+                              <div className="my-1 border-t border-[#e3ded8]" />
+                              <button
+                                role="menuitem"
+                                onClick={() => {
+                                  setMoreMenuOpen(false);
+                                  setConfirmDelete(true);
+                                }}
+                                disabled={!!busyAction}
+                                className="w-full rounded-lg px-3 py-2.5 text-left text-sm font-bold text-red-700 hover:bg-red-50 disabled:opacity-50"
+                              >
+                                Delete workflow
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-            <section className="mt-8 rounded-2xl border border-[#e3ded8] bg-white p-5 sm:p-7">
-              {editing && (
-                <textarea
-                  value={draftDescription}
-                  onChange={(event) => setDraftDescription(event.target.value)}
-                  placeholder="Describe what this workflow does"
-                  className="mb-5 w-full rounded-lg border border-[#d8d1ca] p-3 text-sm"
-                  rows={2}
-                />
-              )}
+            </section>
+            <section className="mt-6 rounded-2xl border border-[#e3ded8] bg-white p-5 shadow-[0_1px_2px_rgba(45,37,37,0.03)] sm:p-6">
               <div className="flex items-center gap-3">
                 <AppIcon app={zap.trigger?.type} />
                 <div>
@@ -490,20 +556,30 @@ export default function ZapDetails() {
                 </div>
               </div>
               <div className="mt-5 flex flex-col gap-2 sm:flex-row">
-                <code className="min-w-0 flex-1 overflow-x-auto rounded-xl bg-[#f7f5f2] px-4 py-3 text-xs">
+                <code className="min-w-0 flex-1 overflow-x-auto rounded-lg border border-[#e3ded8] bg-[#f7f5f2] px-4 py-3 text-xs leading-5">
                   {hookUrl}
                 </code>
                 <button
                   onClick={() => copy(hookUrl, "url")}
-                  className="rounded-xl bg-[#503eb6] px-5 py-3 text-sm font-bold text-white"
+                  className="rounded-lg bg-[#503eb6] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#42319f]"
                 >
                   {copied === "url" ? "Copied!" : "Copy URL"}
                 </button>
               </div>
             </section>
-            <div className="mt-8 grid min-w-0 gap-7 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-              <section className="min-w-0">
-                <h2 className="text-xl font-black">Workflow steps</h2>
+            <div className="mt-6 grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(380px,0.85fr)]">
+              <section className="min-w-0 rounded-2xl border border-[#e3ded8] bg-white p-5 shadow-[0_1px_2px_rgba(45,37,37,0.03)] sm:p-6">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h2 className="text-lg font-black">Workflow steps</h2>
+                    <p className="mt-1 text-xs text-[#7d756f]">
+                      Trigger and actions run from top to bottom.
+                    </p>
+                  </div>
+                  <span className="shrink-0 rounded-full bg-[#f1eeea] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-[#6d6660]">
+                    {zap.actions.length + 1} steps
+                  </span>
+                </div>
                 <div className="mt-4">
                   <ReadOnlyStep
                     number={1}
@@ -552,9 +628,12 @@ export default function ZapDetails() {
                     ))}
                 </div>
               </section>
-              <section className="min-w-0">
-                <h2 className="text-xl font-black">Test the workflow</h2>
-                <div className="mt-4 rounded-2xl bg-[#2d2525] p-5 text-white">
+              <section className="min-w-0 rounded-2xl border border-[#e3ded8] bg-white p-5 shadow-[0_1px_2px_rgba(45,37,37,0.03)] sm:p-6">
+                <h2 className="text-lg font-black">Test the workflow</h2>
+                <p className="mt-1 text-xs text-[#7d756f]">
+                  Send a sample payload before going live.
+                </p>
+                <div className="mt-4 rounded-xl bg-[#2d2525] p-5 text-white">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold uppercase tracking-wider text-white/50">
                       Terminal
@@ -597,7 +676,7 @@ export default function ZapDetails() {
                     {curl}
                   </pre>
                 </div>
-                <div className="mt-4 rounded-xl border border-[#e3ded8] bg-white p-4 text-sm leading-6 text-[#6d6660]">
+                <div className="mt-4 rounded-xl bg-[#f7f5f2] p-4 text-xs leading-5 text-[#6d6660]">
                   <strong className="text-[#2d2525]">Template tip</strong>
                   <br />
                   Fields such as{" "}
@@ -608,7 +687,7 @@ export default function ZapDetails() {
                 </div>
               </section>
             </div>
-            <section className="mt-8 rounded-2xl border border-[#e3ded8] bg-white p-5 sm:p-7">
+            <section className="mt-6 rounded-2xl border border-[#e3ded8] bg-white p-5 shadow-[0_1px_2px_rgba(45,37,37,0.03)] sm:p-7">
               <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
                 <div>
                   <h2 className="text-xl font-black">Run history</h2>
@@ -808,6 +887,26 @@ export default function ZapDetails() {
         </div>
       )}
     </DashboardShell>
+  );
+}
+
+function WorkflowStatus({ status }: { status: string }) {
+  const styles: Record<string, string> = {
+    PUBLISHED: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+    PAUSED: "bg-amber-50 text-amber-700 ring-amber-200",
+    ARCHIVED: "bg-slate-100 text-slate-600 ring-slate-200",
+    DRAFT: "bg-violet-50 text-violet-700 ring-violet-200",
+  };
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.08em] ring-1 ring-inset ${styles[status] ?? styles.DRAFT}`}
+    >
+      <span
+        className="h-1.5 w-1.5 rounded-full bg-current"
+        aria-hidden="true"
+      />
+      {status.replace("_", " ")}
+    </span>
   );
 }
 
